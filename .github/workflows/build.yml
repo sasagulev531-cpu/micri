@@ -43,9 +43,9 @@ jobs:
           import base64
           with open('fcp-jobs-1.0.0.jar', 'rb') as f:
               b64 = base64.b64encode(f.read()).decode('ascii')
-          step = 8000
+          step = 3500
           for idx, start in enumerate(range(0, len(b64), step), 1):
-              print(f"::notice title=JAR_CHUNK_{idx:02d}::{b64[start:start+step]}")
+              print(f"::notice title=JAR_CHUNK_{idx:03d}::{b64[start:start+step]}")
           PY
 
       - name: Upload artifact
