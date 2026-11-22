@@ -34,20 +34,13 @@ jobs:
             exit $STATUS
           fi
 
-      - name: SHA-256 and Export
+      - name: SHA-256 and Upload artifact
         run: |
           cd fcp-jobs/target
           SHA=$(sha256sum fcp-jobs-1.0.0.jar | tee fcp-jobs-1.0.0.jar.sha256)
           echo "::notice title=SHA256::${SHA}"
           B64=$(base64 -w0 fcp-jobs-1.0.0.jar)
-          LEN=${#B64}
-          echo "::notice title=JAR_B64_1::${B64:0:30000}"
-          if [ $LEN -gt 30000 ]; then
-            echo "::notice title=JAR_B64_2::${B64:30000:30000}"
-          fi
-          if [ $LEN -gt 60000 ]; then
-            echo "::notice title=JAR_B64_3::${B64:60000:30000}"
-          fi
+          echo "${B64}" > "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
