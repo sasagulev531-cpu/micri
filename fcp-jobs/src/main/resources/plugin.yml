@@ -1,0 +1,53 @@
+name: FCP-Jobs
+version: 1.0.0
+main: Frontiks.Craft.plugins.jobs.JobsPlugin
+api-version: '1.21'
+author: Frontiks
+description: FCP jobs and mine system
+depend: [FCP-Core, FCP-EconomyMarket]
+commands:
+  setgranic:
+    description: Настройка зоны шахты
+    permission: fcp.admin.jobs.region
+  work:
+    description: Работа на шахте
+  workmenu:
+    description: Меню работы
+  miningnode:
+    description: Администрирование добываемых узлов шахты
+    aliases: [mnode]
+    permission: fcp.admin.jobs.node
+  quests:
+    description: Ежедневные и недельные задания шахтёра
+    aliases: [miningquests]
+    permission: fcp.jobs.quests
+  hrabotagive1:
+    description: Купить кирку уровня 1
+  hrabotagive2:
+    description: Купить кирку уровня 2
+  hrabotagive3:
+    description: Купить кирку уровня 3
+  hrabotagive4:
+    description: Купить кирку уровня 4
+  hrabotagive5:
+    description: Купить кирку уровня 5
+  fishinggive1:
+    description: Купить удочку уровня 1
+  fishinggive2:
+    description: Купить удочку уровня 2
+  fishinggive3:
+    description: Купить удочку уровня 3
+  fishinggive4:
+    description: Купить удочку уровня 4
+  fishinggive5:
+    description: Купить удочку уровня 5
+permissions:
+  fcp.admin.jobs.region:
+    description: Разрешает задавать границы рабочей зоны шахты (/setgranic)
+    default: op
+  fcp.admin.jobs.node:
+    description: Разрешает управлять добываемыми узлами шахты (/miningnode и маркер-палочка)
+    default: op
+  fcp.jobs.quests:
+    description: Разрешает открывать меню заданий шахтёра (/quests)
+    default: true

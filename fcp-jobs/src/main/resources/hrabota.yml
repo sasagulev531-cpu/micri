@@ -1,0 +1,249 @@
+pos1:
+  world: Spawn
+  x: 3.5510555565100144
+  y: 76.36933250861676
+  z: 106.47522375576945
+pos2:
+  world: Spawn
+  x: 66.25724831150008
+  y: 56.87500043798161
+  z: 163.04167463733233
+
+
+work:
+  open_command: work
+  size: 27
+  menu_title: '               &#777070&lШ&#716A6A&lа&#6B6564&lх&#645F5F&lт&#5E5A59&lе&#585453&lр'
+  items:
+    '0':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 0
+      display_name: " "
+    '1':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 1
+      display_name: " "
+    '2':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 2
+      display_name: " "
+    '3':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 3
+      display_name: " "
+    '4':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 4
+      display_name: " "
+    '5':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 5
+      display_name: " "
+    '6':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 6
+      display_name: " "
+    '7':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 7
+      display_name: " "
+    '8':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 8
+      display_name: " "
+    '9':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 9
+      display_name: " "
+    '10':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 10
+      display_name: " "
+    '11':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 11
+      display_name: " "
+    '12':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 12
+      display_name: " "
+    '13':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 13
+      display_name: " "
+    '14':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 14
+      display_name: " "
+    '15':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 15
+      display_name: " "
+    '16':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 16
+      display_name: " "
+    '17':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 17
+      display_name: " "
+    '18':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 18
+      display_name: " "
+    '19':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 19
+      display_name: " "
+    '20':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 20
+      display_name: " "
+    '21':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 21
+      display_name: " "
+    '22':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 22
+      display_name: " "
+    '23':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 23
+      display_name: " "
+    '24':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 24
+      display_name: " "
+    '25':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 25
+      display_name: " "
+    '26':
+      material: GRAY_STAINED_GLASS_PANE
+      slot: 26
+      display_name: " "
+    '27':
+      material: BASEHEAD-eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzRjY2I1Mjc1MGU5N2U4MzBhZWJmYThhMjFkNWRhMGQzNjRkMGZkYWQ5ZmIwY2MyMjBmZTJjYTg0MTE4NDJjMyJ9fX0=
+      slot: 12
+      display_name: "&f&lМагазин кирок"
+      lore:
+        - "&7Нажми, чтобы открыть магазин"
+        - "&7Алмазная кирка - &f1000 монет"
+    '28':
+      material: BASEHEAD-eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGY5OWRjMzJhZDRlZGFkNTI5ODVlZmQ3ZTNhZWI0MmI0MzY1NDA3MTM3MzY3NDJmNmQ5YTNiOTFjMzVlZjg3MSJ9fX0=
+      slot: 14
+      display_name: "&a&lНачать работу"
+      lore:
+        - "&7Нажми, чтобы начать/закончить работу"
+        - "&7В шахте ты будешь получать &f10 &7монет за блок"
+    '29':
+      material: PAPER
+      slot: 4
+      display_name: "&6&lИнформация"
+      lore:
+        - "&7Статус: &aРаботает"
+        - "&7Заработано: &f0 &7монет"
+        - "&7Ломай руду в шахте!"
+        - "&7Каждый блок даёт &f10 &7монет"
+
+# ==============================================================================
+# Настраиваемые добываемые узлы шахты (пример баланса — числа можно менять)
+# ==============================================================================
+mining:
+  # Время восстановления истощённого узла по умолчанию (сек)
+  cooldown-seconds: 45
+  # Награда в монетах смены за полное прохождение всех стадий узла (пример баланса)
+  node-reward-coins: 10
+  # Цепочка стадий по умолчанию для новых узлов: Туф -> Камень -> Андезит
+  stages:
+    - TUFF
+    - STONE
+    - ANDESITE
+  # Визуальный материал истощённого узла (после выдачи лута, пока идёт кулдаун)
+  depleted-material: COBBLESTONE
+  # Лут по умолчанию при полном разрушении последней стадии узла
+  loot:
+    - material: COBBLESTONE
+      min: 2
+      max: 4
+      chance: 1.0
+    - material: COAL
+      min: 1
+      max: 1
+      chance: 0.25
+  # Палитра материалов для переключения в GUI настройки узла (/miningnode)
+  editable-materials:
+    - TUFF
+    - STONE
+    - ANDESITE
+    - COBBLESTONE
+    - DEEPSLATE
+    - COBBLED_DEEPSLATE
+    - COAL_ORE
+    - IRON_ORE
+    - COPPER_ORE
+    - GOLD_ORE
+    - DIAMOND_ORE
+    - EMERALD_ORE
+  # Жёлтая контурная подсветка открытых граней активных узлов
+  markers:
+    enabled: true
+    show-depleted: false
+    radius: 24
+    refresh-ticks: 40
+    points-per-edge: 4
+
+# ==============================================================================
+# Ежедневные и недельные задания шахтёра (пример баланса — числа можно менять)
+# ==============================================================================
+quests:
+  enabled: true
+  # Часовой пояс сброса заданий (понедельник 00:00 для недельных, 00:00 для дневных)
+  timezone: "Europe/Moscow"
+  daily:
+    count: 2
+    pool:
+      - id: daily_cobble_32
+        title: "Добыть 32 булыжника"
+        description: "Соберите булыжник с добываемых узлов шахты"
+        type: COLLECT_LOOT
+        material: COBBLESTONE
+        amount: 32
+        reward: 150
+      - id: daily_coal_8
+        title: "Найти 8 угля"
+        description: "Добудьте уголь при разработке узлов"
+        type: COLLECT_LOOT
+        material: COAL
+        amount: 8
+        reward: 200
+      - id: daily_nodes_10
+        title: "Разработать 10 узлов"
+        description: "Полностью пройдите все стадии 10 узлов"
+        type: COMPLETE_NODES
+        amount: 10
+        reward: 180
+  weekly:
+    count: 2
+    pool:
+      - id: weekly_cobble_256
+        title: "Добыть 256 булыжника за неделю"
+        description: "Крупная поставка булыжника с узлов шахты"
+        type: COLLECT_LOOT
+        material: COBBLESTONE
+        amount: 256
+        reward: 1000
+      - id: weekly_coal_48
+        title: "Найти 48 угля за неделю"
+        description: "Соберите уголь при полном разрушении узлов"
+        type: COLLECT_LOOT
+        material: COAL
+        amount: 48
+        reward: 1200
+      - id: weekly_nodes_75
+        title: "Разработать 75 узлов за неделю"
+        description: "Полностью пройдите все стадии 75 узлов"
+        type: COMPLETE_NODES
+        amount: 75
+        reward: 1500
