@@ -45,6 +45,11 @@ public class WorkMenuListener implements Listener {
             if (WorkManager.isWorking(p)) {
                 WorkManager.stop(p);
             } else {
+                if (!Frontiks.Craft.work.HrabotaConfig.contains(p.getLocation())) {
+                    p.closeInventory();
+                    p.sendMessage(color.color("" + Frontiks.Craft.utils.Msg.PREFIX + "&cВы должны находиться в зоне шахты, чтобы начать работу!"));
+                    return;
+                }
                 WorkManager.start(p);
             }
 

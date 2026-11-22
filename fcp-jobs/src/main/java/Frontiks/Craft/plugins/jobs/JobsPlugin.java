@@ -84,7 +84,7 @@ public final class JobsPlugin extends JavaPlugin {
         var pm = getServer().getPluginManager();
         pm.registerEvents(new QuitListener(), this);
         pm.registerEvents(new WorkMenuListener(), this);
-        pm.registerEvents(new WorkCheckListener(), this);
+        pm.registerEvents(new WorkCheckListener(this), this);
         pm.registerEvents(new MiningListener(this, this.nodeManager), this);
         pm.registerEvents(new MiningNodeMenuListener(this, this.nodeManager), this);
         pm.registerEvents(new QuestsMenuListener(this.questManager, settings), this);
@@ -107,6 +107,11 @@ public final class JobsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        for (Player p : getServer().getOnlinePlayers()) {
+            if (WorkManager.isWorking(p)) {
+                WorkManager.stop(p);
+            }
+        }
         if (this.nodeManager != null) {
             this.nodeManager.shutdown();
         }
