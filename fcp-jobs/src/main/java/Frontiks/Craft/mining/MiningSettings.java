@@ -124,6 +124,31 @@ public final class MiningSettings {
         for (LootEntry e : defaultLoot) copy.add(new LootEntry(e.material, e.min, e.max, e.chance));
         return copy;
     }
+
+    public void saveDefaultLoot(List<LootEntry> loot) {
+        this.defaultLoot = new ArrayList<>(loot);
+        FileConfiguration cfg = HrabotaConfig.get();
+        List<Map<String, Object>> maps = new ArrayList<>();
+        for (LootEntry e : loot) maps.add(e.toMap());
+        cfg.set("mining.loot", maps);
+        HrabotaConfig.save();
+    }
+
+    public void saveDefaultCooldownSeconds(int seconds) {
+        this.cooldownSeconds = Math.max(0, seconds);
+        FileConfiguration cfg = HrabotaConfig.get();
+        cfg.set("mining.cooldown-seconds", this.cooldownSeconds);
+        HrabotaConfig.save();
+    }
+
+    public void saveDefaultStages(List<String> stages, String depleted) {
+        this.defaultStages = new ArrayList<>(stages);
+        this.defaultDepleted = depleted;
+        FileConfiguration cfg = HrabotaConfig.get();
+        cfg.set("mining.stages", this.defaultStages);
+        cfg.set("mining.depleted-material", this.defaultDepleted);
+        HrabotaConfig.save();
+    }
     public List<String> editableMaterials() { return editableMaterials; }
 
     public boolean markersEnabled() { return markersEnabled; }

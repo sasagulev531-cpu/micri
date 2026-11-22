@@ -340,6 +340,89 @@ public final class MiningNodeManager {
         }
     }
 
+    /** Применяет настройки одного эталонного узла (лут, стадии, истощённый блок, кулдаун) ко ВСЕМ узлам и сохраняет их как дефолт для будущих узлов. */
+    public int applyTemplateToAll(MiningNode template) {
+        List<LootEntry> lootCopy = new ArrayList<>();
+        for (LootEntry e : template.loot) lootCopy.add(new LootEntry(e.material, e.min, e.max, e.chance));
+        List<String> chainCopy = new ArrayList<>(template.chain);
+        String depletedCopy = template.depletedMaterial;
+        int cooldownSec = (int) (template.cooldownMillis / 1000L);
+
+        settings.saveDefaultLoot(lootCopy);
+        settings.saveDefaultCooldownSeconds(cooldownSec);
+        settings.saveDefaultStages(chainCopy, depletedCopy);
+
+        int count = 0;
+        for (MiningNode n : snapshot()) {
+            synchronized (n) {
+                List<LootEntry> nl = new ArrayList<>();
+                for (LootEntry e : lootCopy) nl.add(new LootEntry(e.material, e.min, e.max, e.chance));
+                n.loot = nl;
+                n.cooldownMillis = template.cooldownMillis;
+                n.chain = new ArrayList<>(chainCopy);
+                n.depletedMaterial = depletedCopy;
+                n.stageIndex = NodeLogic.clampIndex(n);
+                if (!n.broken) {
+                    applyBlockState(n, NodeLogic.expectedMaterial(n));
+                }
+                persist(n);
+                outlineDirty.add(n.id);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Задаёт глобальный лут в конфиге и сразу обновляет его у ВСЕХ существующих узлов. */
+    public int setGlobalLoot(List<LootEntry> loot) throws MiningNodeException {
+        if (!loot.isEmpty()) {
+            NodeValidator.ValidationResult v = NodeValidator.validateLoot(loot, itemMaterialValidator());
+            if (!v.ok()) throw new MiningNodeException("Лут невалиден: " + v.joined());
+        }
+        settings.saveDefaultLoot(loot);
+        int count = 0;
+        for (MiningNode n : snapshot()) {
+            synchronized (n) {
+                List<LootEntry> nl = new ArrayList<>();
+                for (LootEntry e : loot) nl.add(new LootEntry(e.material, e.min, e.max, e.chance));
+                n.loot = nl;
+                persist(n);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Задаёт глобальный кулдаун в конфиге и сразу обновляет его у ВСЕХ существующих узлов. */
+    public int setGlobalCooldownSeconds(int seconds) {
+        int clamped = Math.max(0, Math.min(86400, seconds));
+        settings.saveDefaultCooldownSeconds(clamped);
+        int count = 0;
+        for (MiningNode n : snapshot()) {
+            synchronized (n) {
+                n.cooldownMillis = clamped * 1000L;
+                persist(n);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Восстанавливает все истощённые узлы разом. */
+    public int restoreAll() {
+        int count = 0;
+        for (MiningNode n : snapshot()) {
+            if (n.depleted && !n.broken) {
+                try {
+                    forceRestore(n);
+                    count++;
+                } catch (MiningNodeException ignored) {
+                }
+            }
+        }
+        return count;
+    }
+
     // ----------------------------------------------------------------- block events
 
     /** Основная обработка ломки блока. Вызывается на main thread ДО ванильных обработчиков. */

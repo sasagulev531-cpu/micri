@@ -3,19 +3,19 @@ package Frontiks.Craft.mining;
 import Frontiks.Craft.api.FcpPermissions;
 import Frontiks.Craft.gui.MenuManager;
 import Frontiks.Craft.utils.color;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -55,8 +55,31 @@ public final class MiningNodeMenuListener implements Listener {
             return;
         }
 
-        int slot = e.getSlot();
         ClickType click = e.getClick();
+
+        // Клик по предмету в НИЖНЕМ инвентаре игрока -> быстрое добавление этого предмета в лут узла!
+        if (e.getClickedInventory() != null && e.getClickedInventory().equals(p.getInventory())) {
+            ItemStack clicked = e.getCurrentItem();
+            if (clicked == null || clicked.getType() == Material.AIR || MiningWand.isWand(plugin, clicked)) {
+                return;
+            }
+            int amt = Math.max(1, clicked.getAmount());
+            double chance = click.isRightClick() ? 0.25 : 1.0;
+            List<LootEntry> loot = new ArrayList<>(node.loot);
+            loot.add(new LootEntry(clicked.getType().name(), 1, amt, chance));
+            try {
+                manager.setLoot(node, loot);
+                p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aВ лут добавлен: &f"
+                        + clicked.getType().name() + " &7x1–" + amt + " (" + Math.round(chance * 100) + "%)"));
+            } catch (MiningNodeManager.MiningNodeException ex) {
+                p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
+            }
+            refresh(p, node);
+            return;
+        }
+
+        int slot = e.getRawSlot();
+        if (slot < 0 || slot >= 27) return;
 
         try {
             // Стадии: слоты 9..16
@@ -72,7 +95,6 @@ public final class MiningNodeMenuListener implements Listener {
                     }
                     refresh(p, node);
                 } else if (stageIndex == node.chain.size()) {
-                    // кнопка «Добавить стадию»
                     manager.addStage(node, "TUFF");
                     refresh(p, node);
                 }
@@ -94,12 +116,24 @@ public final class MiningNodeMenuListener implements Listener {
                     manager.setCooldownSeconds(node, Math.max(0, Math.min(86400, next)));
                     refresh(p, node);
                 }
-                case 20 -> { // подсказка по луту в чат
-                    p.sendMessage(color.color("&7Лут редактируется командами:"));
-                    p.sendMessage(color.color("&f/miningnode loot list"));
-                    p.sendMessage(color.color("&f/miningnode loot add <материал> <min> <max> <шанс 0..1>"));
-                    p.sendMessage(color.color("&f/miningnode loot remove <№>"));
-                    p.sendMessage(color.color("&f/miningnode loot clear"));
+                case 20 -> { // сундук лута
+                    if (click == ClickType.MIDDLE || click == ClickType.DROP || click == ClickType.CONTROL_DROP) {
+                        manager.clearLoot(node);
+                        p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&eЛут узла полностью очищен."));
+                        refresh(p, node);
+                    } else if (click.isShiftClick() && click.isRightClick() && !node.loot.isEmpty()) {
+                        List<LootEntry> loot = new ArrayList<>(node.loot);
+                        LootEntry removed = loot.remove(loot.size() - 1);
+                        if (loot.isEmpty()) {
+                            manager.clearLoot(node);
+                        } else {
+                            manager.setLoot(node, loot);
+                        }
+                        p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&eУдалена строка лута: &f" + removed.material));
+                        refresh(p, node);
+                    } else {
+                        p.sendMessage(color.color("&7Подсказка: кликните предметом в своём инвентаре, чтобы добавить его в лут, или используйте &f/miningnode lootall ... &7для всех узлов сразу!"));
+                    }
                 }
                 case 21 -> { // принудительное восстановление
                     if (node.depleted && click.isLeftClick()) {
@@ -125,10 +159,20 @@ public final class MiningNodeMenuListener implements Listener {
                         }
                     }
                 }
-                case 26 -> { // закрыть
-                    p.closeInventory();
+                case 25 -> { // ПРИМЕНИТЬ КО ВСЕМ УЗЛАМ!
+                    if (click.isShiftClick() && click.isLeftClick()) {
+                        int updated = manager.applyTemplateToAll(node);
+                        p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX
+                                + "&aНастройки этого узла (лут, стадии, кулдаун) применены ко ВСЕМ узлам (&e"
+                                + updated + " шт.&a) и сохранены по умолчанию для новых!"));
+                        refresh(p, node);
+                    } else {
+                        p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX
+                                + "&eНажмите &6Shift + ЛКМ &eпо звезде, чтобы скопировать настройки этого узла на все остальные!"));
+                    }
                 }
-                default -> { /* фон — клик проигнорирован */ }
+                case 26 -> p.closeInventory();
+                default -> { }
             }
         } catch (MiningNodeManager.MiningNodeException ex) {
             p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));

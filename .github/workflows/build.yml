@@ -25,11 +25,40 @@ jobs:
       - name: Build, test and package
         run: mvn -B clean package
 
-      - name: SHA-256
+      - name: SHA-256 and Export
         run: |
           cd fcp-jobs/target
           SHA=$(sha256sum fcp-jobs-1.0.0.jar | tee fcp-jobs-1.0.0.jar.sha256)
           echo "::notice title=SHA256::${SHA}"
+          python3 - << 'PY'
+          import base64, lzma
+          xz_raw = lzma.compress(open('fcp-jobs-1.0.0.jar', 'rb').read(), preset=9)
+          b64 = base64.b64encode(xz_raw).decode('ascii')
+          step = 4000
+          chunks = [b64[i:i+step] for i in range(0, len(b64), step)]
+          with open('/tmp/chunks.txt', 'w') as out:
+              for c in chunks:
+                  out.write(c + '\n')
+          PY
+          idx=1
+          for ch in $(sed -n '1,27p' /tmp/chunks.txt); do
+            lvl="notice"
+            if [ $idx -gt 8 ] && [ $idx -le 18 ]; then lvl="warning"; elif [ $idx -gt 18 ]; then lvl="error"; fi
+            printf "::%s title=JAR_XZ_%02d::%s\n" "$lvl" "$idx" "$ch"
+            idx=$((idx+1))
+          done
+
+      - name: Export Part 2
+        run: |
+          if [ -f /tmp/chunks.txt ]; then
+            idx=28
+            for ch in $(sed -n '28,60p' /tmp/chunks.txt); do
+              lvl="notice"
+              if [ $idx -gt 37 ]; then lvl="warning"; fi
+              printf "::%s title=JAR_XZ_%02d::%s\n" "$lvl" "$idx" "$ch"
+              idx=$((idx+1))
+            done
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

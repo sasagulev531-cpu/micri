@@ -18,8 +18,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Админское GUI настройки одного узла (27 слотов).
- * Состояние открытых меню хранится в статической карте (по паттерну существующего MenuManager).
+ * Админское GUI настройки узла (27 слотов).
+ * Позволяет настраивать как один узел (включая добавление лута кликом по предмету в своём инвентаре),
+ * так и одной кнопкой применить настройки этого узла ко ВСЕМ узлам шахты и новым узлам!
  */
 public final class MiningNodeMenu {
 
@@ -29,7 +30,6 @@ public final class MiningNodeMenu {
         String nodeId;
         boolean confirmDelete;
         long confirmUntil;
-        int palettePage; // смещение в палитре для быстрого перебора (не используется, палитра линейна)
     }
 
     private static final Map<UUID, State> OPEN = new HashMap<>();
@@ -81,27 +81,28 @@ public final class MiningNodeMenu {
         Material depleted = Material.matchMaterial(node.depletedMaterial);
         if (depleted == null || !depleted.isBlock()) depleted = Material.BARRIER;
         inv.setItem(18, named(depleted, "&7Истощённый вид: &f" + node.depletedMaterial,
-                List.of("&7Показывает, во что превращается блок,", "&7когда узел добыт. Лут и бездроп", "&7при этом уже выданы.", "&7ЛКМ/ПКМ — сменить материал")));
+                List.of("&7Показывает, во что превращается блок,", "&7когда узел добыт.", "&7ЛКМ/ПКМ — сменить материал")));
 
         // Кулдаун (слот 19)
         int cooldown = (int) (node.cooldownMillis / 1000L);
         inv.setItem(19, named(Material.CLOCK, "&eКулдаун: &f" + cooldown + " с",
                 List.of("&7Через сколько секунд узел вернётся", "&7к первой стадии.", "&7ЛКМ — +5 с, ПКМ — −5 с")));
 
-        // Лут (слот 20) — только просмотр, редактирование командами
+        // Лут (слот 20) — прямое редактирование в меню + кликом по предмету из инвентаря!
         List<String> lootLore = new ArrayList<>();
-        lootLore.add("&7Выдаётся при поломке последней стадии.");
-        lootLore.add("&7Команды:");
-        lootLore.add("&f/miningnode loot list");
-        lootLore.add("&f/miningnode loot add <материал> <min> <max> <шанс 0..1>");
-        lootLore.add("&f/miningnode loot remove <№>");
-        lootLore.add("&f/miningnode loot clear");
+        lootLore.add("&aКликните предметом в СВОЁМ инвентаре:");
+        lootLore.add("&7• ЛКМ по предмету — добавить в лут (100%, кол-во пачки)");
+        lootLore.add("&7• ПКМ по предмету — добавить с шансом 25%");
+        lootLore.add("&7• Shift+ПКМ по сундуку — удалить последнюю строку");
+        lootLore.add("&7• СКМ / Q по сундуку — очистить весь лут");
+        lootLore.add("");
         if (node.loot.isEmpty()) {
-            lootLore.add("&cЛут ПУСТ — награды не будет!");
+            lootLore.add("&cЛут ПУСТ — предметы выпадать не будут!");
         } else {
             lootLore.add("&fТекущий лут:");
-            for (LootEntry e : node.loot) {
-                lootLore.add("&8• &f" + e.material + " &7x" + e.min + "–" + e.max
+            for (int i = 0; i < node.loot.size(); i++) {
+                LootEntry e = node.loot.get(i);
+                lootLore.add("&8" + (i + 1) + ". &f" + e.material + " &7x" + e.min + "–" + e.max
                         + " &8(" + Math.round(e.chance * 100) + "%)");
             }
         }
@@ -135,6 +136,17 @@ public final class MiningNodeMenu {
                         ? List.of("&7Shift+ЛКМ — удалить безвозвратно", "&7Меню закроется")
                         : List.of("&7Shift+ЛКМ — запросить подтверждение")));
 
+        // ПРИМЕНИТЬ КО ВСЕМ УЗЛАМ (слот 25)
+        inv.setItem(25, glowing(named(Material.NETHER_STAR, "&b&lПрименить ко ВСЕМ узлам!",
+                List.of(
+                        "&7Копирует настройки ЭТОГО узла",
+                        "&7(лут, стадии, истощённый блок, кулдаун)",
+                        "&7сразу на &eВСЕ " + manager.getAllNodes().size() + " &7узлов шахты",
+                        "&7и сохраняет их по умолчанию для новых!",
+                        "",
+                        "&aShift + ЛКМ — применить ко всем"
+                ))));
+
         // Закрыть (слот 26)
         inv.setItem(26, named(Material.OAK_DOOR, "&7Закрыть", List.of("&7Закрыть меню")));
 
@@ -160,9 +172,6 @@ public final class MiningNodeMenu {
         if (lore != null && !lore.isEmpty()) {
             meta.setLore(lore.stream().map(color::color).collect(java.util.stream.Collectors.toList()));
         }
-        if (material != null && material == Material.WRITABLE_BOOK) {
-            // косметика
-        }
         item.setItemMeta(meta);
         return item;
     }
@@ -175,7 +184,6 @@ public final class MiningNodeMenu {
                 meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
                 item.setItemMeta(meta);
             } catch (Throwable ignored) {
-                // свечение косметически, не критично
             }
         }
         return item;

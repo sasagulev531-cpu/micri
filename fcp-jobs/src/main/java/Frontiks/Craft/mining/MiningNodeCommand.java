@@ -17,14 +17,14 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
- * /miningnode — администрирование добываемых узлов шахты.
+ * /miningnode — администрирование добываемых узлов шахты (включая массовое изменение для ВСЕХ узлов сразу).
  * Все подкоманды доступны только привилегированным игрокам (fcp.admin.jobs.node).
  */
 public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of(
-            "wand", "list", "info", "create", "delete", "restore",
-            "validate", "reload", "cooldown", "loot", "help");
+            "wand", "list", "info", "create", "delete", "restore", "restoreall",
+            "validate", "reload", "cooldown", "cooldownall", "loot", "lootall", "applyall", "help");
     private static final List<String> LOOT_SUB = List.of("list", "add", "remove", "clear");
 
     private final JavaPlugin plugin;
@@ -87,6 +87,10 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
                     p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
                 }
             }
+            case "restoreall", "respawnall" -> {
+                int count = manager.restoreAll();
+                p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aВосстановлено истощённых узлов: &f" + count));
+            }
             case "validate" -> {
                 for (String line : manager.validateAll()) {
                     p.sendMessage(color.color("&7- " + line));
@@ -97,7 +101,16 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
                 p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aКонфигурация и узлы перезагружены."));
             }
             case "cooldown" -> cooldown(p, args);
+            case "cooldownall" -> cooldownAll(p, args);
             case "loot" -> loot(p, args);
+            case "lootall" -> lootAll(p, args);
+            case "applyall" -> {
+                MiningNode node = targetNode(p);
+                if (node == null) return true;
+                int updated = manager.applyTemplateToAll(node);
+                p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX
+                        + "&aНастройки этого узла применены ко ВСЕМ узлам (&e" + updated + " шт.&a) и сохранены по умолчанию для новых!"));
+            }
             default -> sendHelp(p, label);
         }
         return true;
@@ -164,6 +177,22 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
         p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aКулдаун узла: " + seconds + " с."));
     }
 
+    private void cooldownAll(Player p, String[] args) {
+        if (args.length < 2) {
+            p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&7Глобальный кулдаун: &f"
+                    + manager.settings().cooldownSeconds() + " с. Изменить для всех: /miningnode cooldownall <сек>"));
+            return;
+        }
+        Integer seconds = parseInt(args[1]);
+        if (seconds == null || seconds < 0 || seconds > 86400) {
+            p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&cКулдаун: целое число 0..86400 секунд."));
+            return;
+        }
+        int updated = manager.setGlobalCooldownSeconds(seconds);
+        p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX
+                + "&aКулдаун &f" + seconds + " с &aустановлен для ВСЕХ узлов (&e" + updated + " шт.&a) и для новых!"));
+    }
+
     private void loot(Player p, String[] args) {
         MiningNode node = targetNode(p);
         if (node == null) return;
@@ -216,7 +245,6 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
                     manager.setLoot(node, loot);
                     p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aУдалено: " + removed.material));
                 } catch (MiningNodeManager.MiningNodeException ex) {
-                    // Лут не может стать пустым через setLoot — обходим валидацию через clear semantics:
                     if (loot.isEmpty()) {
                         manager.clearLoot(node);
                         p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aЛут очищен."));
@@ -227,9 +255,87 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
             }
             case "clear" -> {
                 manager.clearLoot(node);
-                p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aЛут узла очищен (задания по луту не будут выполняться этой ломкой)."));
+                p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aЛут узла очищен."));
             }
             default -> p.sendMessage(color.color("&cНеизвестная подкоманда loot: " + sub + ". Доступно: list, add, remove, clear"));
+        }
+    }
+
+    private void lootAll(Player p, String[] args) {
+        List<LootEntry> current = manager.settings().defaultLoot();
+        if (args.length < 2 || args[1].equalsIgnoreCase("list")) {
+            p.sendMessage(color.color("&8---- &6Глобальный лут (для всех узлов) &8----"));
+            if (current.isEmpty()) {
+                p.sendMessage(color.color("&cЛут пуст."));
+            } else {
+                for (int i = 0; i < current.size(); i++) {
+                    LootEntry e = current.get(i);
+                    p.sendMessage(color.color("&8" + (i + 1) + ". &f" + e.material + " &7x" + e.min + "–" + e.max
+                            + " &8(" + Math.round(e.chance * 100) + "%)"));
+                }
+            }
+            return;
+        }
+        String sub = args[1].toLowerCase(Locale.ROOT);
+        switch (sub) {
+            case "add" -> {
+                if (args.length < 6) {
+                    p.sendMessage(color.color("&cИспользование: /miningnode lootall add <материал> <min> <max> <шанс 0..1>"));
+                    p.sendMessage(color.color("&7Пример: /miningnode lootall add IRON_INGOT 1 3 0.5"));
+                    return;
+                }
+                Material material = Material.matchMaterial(args[2].trim().toUpperCase(Locale.ROOT));
+                Integer min = parseInt(args[3]);
+                Integer max = parseInt(args[4]);
+                Double chance = parseDouble(args[5]);
+                if (material == null) {
+                    p.sendMessage(color.color("&cНеизвестный материал: " + args[2]));
+                    return;
+                }
+                if (min == null || max == null || chance == null || min < 1 || max < min || chance <= 0.0 || chance > 1.0) {
+                    p.sendMessage(color.color("&cНекорректные значения: min>=1, max>=min, 0<шанс<=1."));
+                    return;
+                }
+                List<LootEntry> loot = new ArrayList<>(current);
+                loot.add(new LootEntry(material.name(), min, max, chance));
+                try {
+                    int updated = manager.setGlobalLoot(loot);
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aЛут &f" + material.name()
+                            + " &aдобавлен для ВСЕХ узлов (&e" + updated + " шт.&a) и для новых!"));
+                } catch (MiningNodeManager.MiningNodeException ex) {
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
+                }
+            }
+            case "remove" -> {
+                if (args.length < 3) {
+                    p.sendMessage(color.color("&cИспользование: /miningnode lootall remove <номер>"));
+                    return;
+                }
+                Integer index = parseInt(args[2]);
+                if (index == null || index < 1 || index > current.size()) {
+                    p.sendMessage(color.color("&cНомер от 1 до " + current.size()));
+                    return;
+                }
+                List<LootEntry> loot = new ArrayList<>(current);
+                LootEntry removed = loot.remove(index - 1);
+                try {
+                    int updated = manager.setGlobalLoot(loot);
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aУдалено &f" + removed.material
+                            + " &aу ВСЕХ узлов (&e" + updated + " шт.&a)!"));
+                } catch (MiningNodeManager.MiningNodeException ex) {
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
+                }
+            }
+            case "clear" -> {
+                try {
+                    int updated = manager.setGlobalLoot(List.of());
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX
+                            + "&aЛут очищен у ВСЕХ узлов (&e" + updated + " шт.&a) и в шаблоне по умолчанию."));
+                } catch (MiningNodeManager.MiningNodeException ex) {
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
+                }
+            }
+            default -> p.sendMessage(color.color("&cНеизвестная подкоманда lootall: " + sub + ". Доступно: list, add, remove, clear"));
         }
     }
 
@@ -255,16 +361,14 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
 
     private void sendHelp(Player p, String label) {
         p.sendMessage(color.color("&8---- &6/" + label + " &8----"));
-        p.sendMessage(color.color("&e/" + label + " wand &7— получить инструмент настройки"));
-        p.sendMessage(color.color("&e/" + label + " list &7— список узлов"));
-        p.sendMessage(color.color("&e/" + label + " info &7— информация об узле в прицеле"));
-        p.sendMessage(color.color("&e/" + label + " create &7— настроить узел на блоке в прицеле"));
-        p.sendMessage(color.color("&e/" + label + " delete &7— удалить узел на блоке в прицеле"));
-        p.sendMessage(color.color("&e/" + label + " restore &7— восстановить истощённый узел"));
-        p.sendMessage(color.color("&e/" + label + " validate &7— проверить конфиг и узлы"));
-        p.sendMessage(color.color("&e/" + label + " reload &7— перечитать hrabota.yml и узлы"));
-        p.sendMessage(color.color("&e/" + label + " cooldown [сек] &7— показать/задать кулдаун узла"));
-        p.sendMessage(color.color("&e/" + label + " loot list|add|remove|clear &7— настройка лута узла"));
+        p.sendMessage(color.color("&e/" + label + " wand &7— получить маркер шахты"));
+        p.sendMessage(color.color("&e/" + label + " applyall &7— скопировать настройки узла в прицеле на ВСЕ узлы"));
+        p.sendMessage(color.color("&e/" + label + " lootall list|add|remove|clear &7— изменить лут сразу у ВСЕХ узлов"));
+        p.sendMessage(color.color("&e/" + label + " cooldownall <сек> &7— задать кулдаун сразу ВСЕМ узлам"));
+        p.sendMessage(color.color("&e/" + label + " restoreall &7— восстановить сразу все истощённые узлы"));
+        p.sendMessage(color.color("&e/" + label + " list / info / create / delete / restore &7— работа с одним узлом"));
+        p.sendMessage(color.color("&e/" + label + " cooldown <сек> / loot ... &7— кулдаун и лут одного узла"));
+        p.sendMessage(color.color("&e/" + label + " validate / reload &7— проверка и перезагрузка конфига"));
     }
 
     private static Integer parseInt(String s) {
@@ -277,7 +381,7 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!(sender instanceof Player) || !FcpPermissions.adminOr((Player) sender, "fcp.admin.jobs.node")) {
+        if (!(sender instanceof Player) || !FcpPermissions.adminOr(sender, "fcp.admin.jobs.node")) {
             return List.of();
         }
         if (args.length == 1) {
@@ -285,7 +389,7 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
             return SUBCOMMANDS.stream().filter(s -> s.startsWith(prefix)).collect(Collectors.toList());
         }
         String sub = args[0].toLowerCase(Locale.ROOT);
-        if (sub.equals("loot")) {
+        if (sub.equals("loot") || sub.equals("lootall")) {
             if (args.length == 2) {
                 String prefix = args[1].toLowerCase(Locale.ROOT);
                 return LOOT_SUB.stream().filter(s -> s.startsWith(prefix)).collect(Collectors.toList());
