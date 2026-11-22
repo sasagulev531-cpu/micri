@@ -2,6 +2,8 @@ package Frontiks.Craft.work;
 
 import Frontiks.Craft.api.LegacyFiles;
 import Frontiks.Craft.api.FcpYamlStorage;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -25,13 +27,81 @@ public class HrabotaConfig {
         config = FcpYamlStorage.load(plugin, file);
     }
 
-    public static boolean contains(org.bukkit.Location loc) {
-        if (loc==null || loc.getWorld()==null || config==null || !config.contains("pos1.world") || !config.contains("pos2.world")) return false;
-        String w1=config.getString("pos1.world"), w2=config.getString("pos2.world");
-        if (w1==null || w2==null || !loc.getWorld().getName().equals(w1) || !w1.equals(w2)) return false;
-        double x1=config.getDouble("pos1.x"),y1=config.getDouble("pos1.y"),z1=config.getDouble("pos1.z"),x2=config.getDouble("pos2.x"),y2=config.getDouble("pos2.y"),z2=config.getDouble("pos2.z");
-        return loc.getX()>=Math.min(x1,x2)&&loc.getX()<=Math.max(x1,x2)&&loc.getY()>=Math.min(y1,y2)&&loc.getY()<=Math.max(y1,y2)&&loc.getZ()>=Math.min(z1,z2)&&loc.getZ()<=Math.max(z1,z2);
+    public static boolean contains(Location loc) {
+        if (loc == null || loc.getWorld() == null || config == null
+                || !config.contains("pos1.world") || !config.contains("pos2.world")) {
+            return false;
+        }
+        String w1 = config.getString("pos1.world");
+        String w2 = config.getString("pos2.world");
+        if (w1 == null || w2 == null || !w1.equalsIgnoreCase(w2)) {
+            return false;
+        }
+        if (!matchesWorld(loc.getWorld(), w1)) {
+            return false;
+        }
+
+        int bx1 = (int) Math.floor(config.getDouble("pos1.x"));
+        int by1 = (int) Math.floor(config.getDouble("pos1.y"));
+        int bz1 = (int) Math.floor(config.getDouble("pos1.z"));
+
+        int bx2 = (int) Math.floor(config.getDouble("pos2.x"));
+        int by2 = (int) Math.floor(config.getDouble("pos2.y"));
+        int bz2 = (int) Math.floor(config.getDouble("pos2.z"));
+
+        int minX = Math.min(bx1, bx2);
+        int maxX = Math.max(bx1, bx2);
+        int minY = Math.min(by1, by2) - 1; // включая пол под ногами, на котором стоял админ при /setgranic
+        int maxY = Math.max(by1, by2) + 2; // включая блоки на уровне головы/потолка
+        int minZ = Math.min(bz1, bz2);
+        int maxZ = Math.max(bz1, bz2);
+
+        int x = loc.getBlockX();
+        int y = loc.getBlockY();
+        int z = loc.getBlockZ();
+
+        return x >= minX && x <= maxX
+                && y >= minY && y <= maxY
+                && z >= minZ && z <= maxZ;
     }
+
+    private static boolean matchesWorld(World world, String configured) {
+        String target = stripNamespace(configured.trim());
+        String actualName = stripNamespace(world.getName());
+        if (actualName.equalsIgnoreCase(target)) {
+            return true;
+        }
+        try {
+            String keyVal = world.getKey().getKey();
+            if (keyVal.equalsIgnoreCase(target)) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    private static String stripNamespace(String s) {
+        int colon = s.indexOf(':');
+        return colon >= 0 ? s.substring(colon + 1) : s;
+    }
+
+    public static String describeBounds() {
+        if (config == null || !config.contains("pos1.world") || !config.contains("pos2.world")) {
+            return "зона не задана в hrabota.yml";
+        }
+        int bx1 = (int) Math.floor(config.getDouble("pos1.x"));
+        int by1 = (int) Math.floor(config.getDouble("pos1.y"));
+        int bz1 = (int) Math.floor(config.getDouble("pos1.z"));
+        int bx2 = (int) Math.floor(config.getDouble("pos2.x"));
+        int by2 = (int) Math.floor(config.getDouble("pos2.y"));
+        int bz2 = (int) Math.floor(config.getDouble("pos2.z"));
+        return "зона: " + config.getString("pos1.world")
+                + " X[" + Math.min(bx1, bx2) + ".." + Math.max(bx1, bx2) + "]"
+                + " Y[" + (Math.min(by1, by2) - 1) + ".." + (Math.max(by1, by2) + 2) + "]"
+                + " Z[" + Math.min(bz1, bz2) + ".." + Math.max(bz1, bz2) + "]";
+    }
+
     public static FileConfiguration get() {
         if (config == null) {
             config = new YamlConfiguration();

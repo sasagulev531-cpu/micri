@@ -182,7 +182,17 @@ public final class MiningNodeManager {
                 plugin.getLogger().warning("Узел " + node.id + ": некорректный world-uuid");
             }
         }
-        return node.worldName == null || node.worldName.isBlank() ? null : Bukkit.getWorld(node.worldName);
+        if (node.worldName != null && !node.worldName.isBlank()) {
+            World exact = Bukkit.getWorld(node.worldName);
+            if (exact != null) return exact;
+            for (World w : Bukkit.getWorlds()) {
+                if (w.getName().equalsIgnoreCase(node.worldName)
+                        || w.getKey().getKey().equalsIgnoreCase(node.worldName)) {
+                    return w;
+                }
+            }
+        }
+        return null;
     }
 
     // ----------------------------------------------------------------- create / delete / edit
@@ -453,7 +463,10 @@ public final class MiningNodeManager {
     public void handleWandClick(Player admin, Block block, boolean openMenu) {
         if (!HrabotaConfig.contains(block.getLocation())) {
             admin.sendMessage(Frontiks.Craft.utils.color.color(
-                    Frontiks.Craft.utils.Msg.PREFIX + "&cЭтот блок вне шахтной зоны."));
+                    Frontiks.Craft.utils.Msg.PREFIX + "&cЭтот блок вне шахтной зоны ("
+                            + HrabotaConfig.describeBounds() + ", клик: "
+                            + block.getWorld().getName() + " "
+                            + block.getX() + " " + block.getY() + " " + block.getZ() + ")."));
             return;
         }
         MiningNode existing = getNodeAt(block.getLocation());
