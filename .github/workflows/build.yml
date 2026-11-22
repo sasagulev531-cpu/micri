@@ -40,25 +40,42 @@ jobs:
           SHA=$(sha256sum fcp-jobs-1.0.0.jar | tee fcp-jobs-1.0.0.jar.sha256)
           echo "::notice title=SHA256::${SHA}"
           python3 - << 'PY'
-          import base64, lzma, zipfile
+          import base64, io, lzma, zipfile
           with zipfile.ZipFile('fcp-jobs-1.0.0.jar', 'r') as zf:
-              raw_items = []
-              for info in zf.infolist():
-                  raw_items.append((info.filename, zf.read(info.filename)))
-          import io
+              items = [(i.filename, zf.read(i.filename)) for i in zf.infolist()]
           buf = io.BytesIO()
           with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_STORED) as zout:
-              for name, data in raw_items:
+              for name, data in items:
                   zout.writestr(name, data)
-          xz = lzma.compress(open('fcp-jobs-1.0.0.jar', 'rb').read(), preset=9)
-          b64 = base64.b64encode(xz).decode('ascii')
-          print(f"::notice title=JAR_META::jar_bytes={len(open('fcp-jobs-1.0.0.jar','rb').read())},b64_len={len(b64)}")
+          xz_stored = lzma.compress(buf.getvalue(), preset=9)
+          xz_raw = lzma.compress(open('fcp-jobs-1.0.0.jar', 'rb').read(), preset=9)
+          b64 = base64.b64encode(xz_raw).decode('ascii')
+          print(f"::notice title=JAR_META::xz_stored_b64={len(base64.b64encode(xz_stored))},xz_raw_b64={len(b64)}")
           step = 4000
           chunks = [b64[i:i+step] for i in range(0, len(b64), step)]
-          for idx, ch in enumerate(chunks, 1):
-              level = "notice" if idx <= 8 else ("warning" if idx <= 18 else "error")
-              print(f"::{level} title=JAR_XZ_{idx:02d}::{ch}")
+          with open('/tmp/chunks.txt', 'w') as out:
+              for c in chunks:
+                  out.write(c + '\n')
           PY
+          idx=1
+          for ch in $(sed -n '1,27p' /tmp/chunks.txt); do
+            lvl="notice"
+            if [ $idx -gt 8 ] && [ $idx -le 18 ]; then lvl="warning"; elif [ $idx -gt 18 ]; then lvl="error"; fi
+            printf "::%s title=JAR_XZ_%02d::%s\n" "$lvl" "$idx" "$ch"
+            idx=$((idx+1))
+          done
+
+      - name: Export Part 2
+        run: |
+          if [ -f /tmp/chunks.txt ]; then
+            idx=28
+            for ch in $(sed -n '28,60p' /tmp/chunks.txt); do
+              lvl="notice"
+              if [ $idx -gt 37 ]; then lvl="warning"; fi
+              printf "::%s title=JAR_XZ_%02d::%s\n" "$lvl" "$idx" "$ch"
+              idx=$((idx+1))
+            done
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
