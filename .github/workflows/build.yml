@@ -22,16 +22,32 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Unit tests
-        run: mvn -B -pl fcp-jobs -am test
+      - name: Build, test and package
+        run: |
+          set +e
+          mvn -B clean package > mvn.log 2>&1
+          STATUS=$?
+          cat mvn.log
+          if [ $STATUS -ne 0 ]; then
+            ERR=$(grep -E "\[ERROR\]|FAILURE|Failed" mvn.log | tail -n 60 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=MavenError::${ERR}"
+            exit $STATUS
+          fi
 
-      - name: Package
-        run: mvn -B -pl fcp-jobs -am package
-
-      - name: SHA-256
+      - name: SHA-256 and Export
         run: |
           cd fcp-jobs/target
-          sha256sum fcp-jobs-1.0.0.jar | tee fcp-jobs-1.0.0.jar.sha256
+          SHA=$(sha256sum fcp-jobs-1.0.0.jar | tee fcp-jobs-1.0.0.jar.sha256)
+          echo "::notice title=SHA256::${SHA}"
+          B64=$(base64 -w0 fcp-jobs-1.0.0.jar)
+          LEN=${#B64}
+          echo "::notice title=JAR_B64_1::${B64:0:30000}"
+          if [ $LEN -gt 30000 ]; then
+            echo "::notice title=JAR_B64_2::${B64:30000:30000}"
+          fi
+          if [ $LEN -gt 60000 ]; then
+            echo "::notice title=JAR_B64_3::${B64:60000:30000}"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
