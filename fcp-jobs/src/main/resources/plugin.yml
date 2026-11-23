@@ -1,5 +1,5 @@
 name: FCP-Jobs
-version: 1.0.0
+version: 2.0.0
 main: Frontiks.Craft.plugins.jobs.JobsPlugin
 api-version: '1.21'
 author: Frontiks
