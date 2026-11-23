@@ -34,31 +34,12 @@ jobs:
           import base64, lzma
           xz_raw = lzma.compress(open('fcp-jobs-1.0.0.jar', 'rb').read(), preset=9)
           b64 = base64.b64encode(xz_raw).decode('ascii')
-          step = 4000
+          step = 8000
           chunks = [b64[i:i+step] for i in range(0, len(b64), step)]
-          with open('/tmp/chunks.txt', 'w') as out:
-              for c in chunks:
-                  out.write(c + '\n')
+          for idx, ch in enumerate(chunks, 1):
+              lvl = "notice" if idx <= 9 else ("warning" if idx <= 19 else "error")
+              print(f"::{lvl} title=JAR_XZ_{idx:02d}::{ch}")
           PY
-          idx=1
-          for ch in $(sed -n '1,25p' /tmp/chunks.txt); do
-            lvl="notice"
-            if [ $idx -gt 8 ] && [ $idx -le 17 ]; then lvl="warning"; elif [ $idx -gt 17 ]; then lvl="error"; fi
-            printf "::%s title=JAR_XZ_%02d::%s\n" "$lvl" "$idx" "$ch"
-            idx=$((idx+1))
-          done
-
-      - name: Export Part 2
-        run: |
-          if [ -f /tmp/chunks.txt ]; then
-            idx=26
-            for ch in $(sed -n '26,50p' /tmp/chunks.txt); do
-              lvl="notice"
-              if [ $idx -gt 34 ] && [ $idx -le 43 ]; then lvl="warning"; elif [ $idx -gt 43 ]; then lvl="error"; fi
-              printf "::%s title=JAR_XZ_%02d::%s\n" "$lvl" "$idx" "$ch"
-              idx=$((idx+1))
-            done
-          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
