@@ -19,7 +19,6 @@ public class WorkMenu {
     private static final int SIZE = 27;
     public static final String MENU_ID = "work_menu";
 
-    private static final String SHOP_SKULL_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzRjY2I1Mjc1MGU5N2U4MzBhZWJmYThhMjFkNWRhMGQzNjRkMGZkYWQ5ZmIwY2MyMjBmZTJjYTg0MTE4NDJjMyJ9fX0=";
     private static final String WORK_SKULL_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGY5OWRjMzJhZDRlZGFkNTI5ODVlZmQ3ZTNhZWI0MmI0MzY1NDA3MTM3MzY3NDJmNmQ5YTNiOTFjMzVlZjg3MSJ9fX0=";
 
     public static void open(Player p) {
@@ -31,14 +30,11 @@ public class WorkMenu {
             inv.setItem(i, glass);
         }
 
-        // Кнопка "Магазин кирок" (слот 12)
-        inv.setItem(12, createShopButton());
+        // Кнопка "Задания шахтёра" (слот 12 — на месте старого магазина кирок)
+        inv.setItem(12, createQuestButton());
 
         // Кнопка "Начать/Закончить работу" (слот 14)
         inv.setItem(14, createWorkButton(p));
-
-        // Кнопка "Задания" (слот 16)
-        inv.setItem(16, createQuestButton());
 
         // Информация (слот 4)
         inv.setItem(4, createInfo(p));
@@ -79,16 +75,6 @@ public class WorkMenu {
         return skull;
     }
 
-    private static ItemStack createShopButton() {
-        return createSkull(
-                SHOP_SKULL_TEXTURE,
-                "&f&lМагазин кирок",
-                Arrays.asList(
-                        "&7Нажмите, чтобы открыть магазин"
-                )
-        );
-    }
-
     private static ItemStack createWorkButton(Player p) {
         boolean isWorking = WorkManager.isWorking(p);
 
@@ -113,9 +99,9 @@ public class WorkMenu {
         ItemStack item = new ItemStack(Material.WRITABLE_BOOK);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(color.color("&6&lЗадания шахтёра"));
+            meta.setDisplayName(color.color("&6&lЗадачи шахтёра"));
             meta.setLore(Arrays.asList(
-                    color.color("&7Ежедневные и недельные поручения"),
+                    color.color("&7Ежедневные и недельные задачи"),
                     color.color("&7с наградой в монетах"),
                     color.color(""),
                     color.color("&eНажмите, чтобы открыть")

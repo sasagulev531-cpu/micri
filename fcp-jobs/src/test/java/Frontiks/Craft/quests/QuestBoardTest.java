@@ -115,4 +115,49 @@ class QuestBoardTest {
                 QuestBoard.periodKey(QuestBoard.Period.WEEKLY, msk, monEarly)
         );
     }
+
+    @Test
+    void breakBlockObtainItemAndMaxAmount65536Work() {
+        QuestDef qBreak = QuestDef.fromRaw(Map.of(
+                "id", "q_break_stone",
+                "type", "сломать",
+                "material", "STONE",
+                "amount", 65536,
+                "reward", 5000
+        ), "test");
+        assertEquals(QuestDef.Type.BREAK_BLOCK, qBreak.type);
+        assertEquals(65536, qBreak.amount);
+
+        assertThrows(IllegalArgumentException.class, () -> QuestDef.fromRaw(Map.of(
+                "id", "q_too_big",
+                "type", "добыть",
+                "material", "COAL",
+                "amount", 65537,
+                "reward", 100
+        ), "test"));
+
+        QuestDef qGet = QuestDef.fromRaw(Map.of(
+                "id", "q_get_iron",
+                "type", "получить",
+                "material", "IRON_INGOT",
+                "amount", 5,
+                "reward", 200
+        ), "test");
+        assertEquals(QuestDef.Type.OBTAIN_ITEM, qGet.type);
+
+        Map<String, QuestDef> defs = Map.of(qBreak.id, qBreak, qGet.id, qGet);
+        List<QuestAssignment> active = List.of(new QuestAssignment(qBreak.id), new QuestAssignment(qGet.id));
+        AtomicInteger paid = new AtomicInteger();
+
+        var r1 = QuestBoard.applyProgress(
+                active, defs,
+                Map.of("STONE", 65536),
+                Map.of(),
+                Map.of("IRON_INGOT", 5),
+                0,
+                (id, coins) -> { paid.addAndGet(coins); return true; }
+        );
+        assertEquals(2, r1.completedNow().size());
+        assertEquals(5200, paid.get());
+    }
 }

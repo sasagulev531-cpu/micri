@@ -77,19 +77,25 @@ public final class QuestBoard {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Начисляет прогресс по активным заданиям игрока и выплачивает награды.
-     * Выплаты, не прошедшие в этот раз (sink вернул false/исключение), останутся paid=false
-     * и будут повторены при следующем вызове либо вручную через /quests claim.
-     *
-     * @param active        активные назначения (мутируются)
-     * @param defs          id -> описание задания (из текущего конфига)
-     * @param lootCounts    сколько какого лута реально получено (material -> count)
-     * @param nodesCompleted сколько узлов завершено за событие (обычно 1 или 0)
-     * @param sink          выплата наград
-     */
+    /** Совместимая перегрузка: лут засчитывается и в LOOT_AMOUNT, и в OBTAIN_ITEM. */
     public static ApplyResult applyProgress(List<QuestAssignment> active, Map<String, QuestDef> defs,
                                             Map<String, Integer> lootCounts, int nodesCompleted,
+                                            PayoutSink sink) {
+        return applyProgress(active, defs, Map.of(), lootCounts, lootCounts, nodesCompleted, sink);
+    }
+
+    /**
+     * Полное начисление прогресса по всем 4 типам задач:
+     * - BREAK_BLOCK (сломать блок/стадию)
+     * - LOOT_AMOUNT (добыть ресурс с узла)
+     * - OBTAIN_ITEM (получить предмет с узла или из печи)
+     * - NODES_COMPLETED (полностью завершить узел)
+     */
+    public static ApplyResult applyProgress(List<QuestAssignment> active, Map<String, QuestDef> defs,
+                                            Map<String, Integer> brokenBlocks,
+                                            Map<String, Integer> lootCounts,
+                                            Map<String, Integer> obtainedItems,
+                                            int nodesCompleted,
                                             PayoutSink sink) {
         List<String> completedNow = new ArrayList<>();
         List<String> paidNow = new ArrayList<>();
@@ -102,20 +108,20 @@ public final class QuestBoard {
             if (def == null) continue; // задание убрали из конфига — молча пропускаем
 
             if (a.completed) {
-                // Повторная попытка выплаты за уже выполненное, но неоплаченное задание.
                 if (!a.paid) tryPay(a, def, sink, paidNow, payFailed);
                 continue;
             }
 
-            int gain;
-            if (def.type == QuestDef.Type.LOOT_AMOUNT) {
-                gain = lootCounts == null ? 0 : lootCounts.getOrDefault(def.material, 0);
-            } else {
-                gain = Math.max(0, nodesCompleted);
-            }
+            int gain = switch (def.type) {
+                case BREAK_BLOCK -> countForMaterial(brokenBlocks, def.material);
+                case LOOT_AMOUNT -> countForMaterial(lootCounts, def.material);
+                case OBTAIN_ITEM -> countForMaterial(obtainedItems, def.material);
+                case NODES_COMPLETED -> Math.max(0, nodesCompleted);
+            };
             if (gain <= 0) continue;
 
-            a.progress = Math.min(def.amount, a.progress + gain);
+            long sum = (long) a.progress + gain;
+            a.progress = (int) Math.min(def.amount, sum);
             if (a.progress >= def.amount && !a.completed) {
                 a.completed = true;
                 completedNow.add(def.id);
@@ -125,6 +131,18 @@ public final class QuestBoard {
             }
         }
         return new ApplyResult(completedNow, paidNow, payFailed, inProgress);
+    }
+
+    private static int countForMaterial(Map<String, Integer> counts, String targetMaterial) {
+        if (counts == null || counts.isEmpty() || targetMaterial == null) return 0;
+        if ("ANY".equalsIgnoreCase(targetMaterial) || "*".equals(targetMaterial)) {
+            int total = 0;
+            for (Integer v : counts.values()) {
+                if (v != null && v > 0) total += v;
+            }
+            return total;
+        }
+        return Math.max(0, counts.getOrDefault(targetMaterial.toUpperCase(), 0));
     }
 
     /** Ручной повторный запуск выплат за задания, которые уже выполнены, но не оплачены. */

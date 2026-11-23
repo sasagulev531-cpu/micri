@@ -88,17 +88,15 @@ public final class MiningSettings {
             configErrors.add("quests.timezone='" + tz + "' невалиден — используется Europe/Moscow");
             timezone = "Europe/Moscow";
         }
-        dailyCount = Math.max(1, Math.min(6, cfg.getInt("quests.daily.count", 2)));
-        weeklyCount = Math.max(1, Math.min(6, cfg.getInt("quests.weekly.count", 2)));
+        dailyCount = Math.max(1, Math.min(7, cfg.getInt("quests.daily.count", 2)));
+        weeklyCount = Math.max(1, Math.min(7, cfg.getInt("quests.weekly.count", 2)));
         if (cfg.contains("quests.daily.pool")) {
             dailyPool = parseQuestPool(cfg.getMapList("quests.daily.pool"), "quests.daily.pool");
-            if (dailyPool.isEmpty()) configErrors.add("quests.daily.pool пуст или все задания невалидны");
         } else {
             dailyPool = builtinDailyPool();
         }
         if (cfg.contains("quests.weekly.pool")) {
             weeklyPool = parseQuestPool(cfg.getMapList("quests.weekly.pool"), "quests.weekly.pool");
-            if (weeklyPool.isEmpty()) configErrors.add("quests.weekly.pool пуст или все задания невалидны");
         } else {
             weeklyPool = builtinWeeklyPool();
         }
@@ -163,6 +161,34 @@ public final class MiningSettings {
     public int weeklyCount() { return weeklyCount; }
     public List<QuestDef> dailyPool() { return dailyPool; }
     public List<QuestDef> weeklyPool() { return weeklyPool; }
+
+    public void saveQuestPool(Frontiks.Craft.quests.QuestBoard.Period period, List<QuestDef> pool) {
+        List<QuestDef> copy = new ArrayList<>(pool);
+        FileConfiguration cfg = HrabotaConfig.get();
+        List<Map<String, Object>> serialized = new ArrayList<>();
+        for (QuestDef d : copy) serialized.add(d.toMap());
+        if (period == Frontiks.Craft.quests.QuestBoard.Period.DAILY) {
+            this.dailyPool = copy;
+            cfg.set("quests.daily.pool", serialized);
+        } else {
+            this.weeklyPool = copy;
+            cfg.set("quests.weekly.pool", serialized);
+        }
+        HrabotaConfig.save();
+    }
+
+    public void saveQuestCount(Frontiks.Craft.quests.QuestBoard.Period period, int count) {
+        int clamped = Math.max(1, Math.min(7, count));
+        FileConfiguration cfg = HrabotaConfig.get();
+        if (period == Frontiks.Craft.quests.QuestBoard.Period.DAILY) {
+            this.dailyCount = clamped;
+            cfg.set("quests.daily.count", clamped);
+        } else {
+            this.weeklyCount = clamped;
+            cfg.set("quests.weekly.count", clamped);
+        }
+        HrabotaConfig.save();
+    }
 
     /** id -> QuestDef для быстрого поиска во время начисления. */
     public Map<String, QuestDef> dailyDefs() { return toMap(dailyPool); }

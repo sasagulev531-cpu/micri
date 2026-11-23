@@ -1,16 +1,29 @@
 package Frontiks.Craft.quests;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
 /** Описание одного задания из конфига. Чистая логика. */
 public final class QuestDef {
 
-    public enum Type { LOOT_AMOUNT, NODES_COMPLETED }
+    /** Максимальное количество цели задания: 2^16 = 65536. */
+    public static final int MAX_AMOUNT = 65536;
+
+    public enum Type {
+        /** Сломать блок в шахте (конкретный блок или ANY — любой блок узла). */
+        BREAK_BLOCK,
+        /** Добыть предмет из лута узлов шахты (конкретный предмет или ANY). */
+        LOOT_AMOUNT,
+        /** Получить предмет (из лута шахты или выплавкой в печи; конкретный предмет или ANY). */
+        OBTAIN_ITEM,
+        /** Полностью разработать N узлов шахты (все стадии). */
+        NODES_COMPLETED
+    }
 
     public final String id;
     public final Type type;
-    /** Для LOOT_AMOUNT — материал, иначе null. */
+    /** Для BREAK_BLOCK / LOOT_AMOUNT / OBTAIN_ITEM — материал (или "ANY"), для NODES_COMPLETED — null. */
     public final String material;
     public final int amount;
     public final String title;
@@ -28,6 +41,20 @@ public final class QuestDef {
         this.reward = reward;
     }
 
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", id);
+        map.put("title", title);
+        map.put("description", description == null ? "" : description);
+        map.put("type", type.name());
+        if (material != null && !material.isBlank()) {
+            map.put("material", material);
+        }
+        map.put("amount", amount);
+        map.put("reward", reward);
+        return map;
+    }
+
     /**
      * Парсит задание из конфига. Бросает IllegalArgumentException с понятным сообщением,
      * если запись невалидна (вызывающая сторона логирует и пропускает задание).
@@ -39,20 +66,24 @@ public final class QuestDef {
 
         String typeRaw = str(raw.get("type")).toUpperCase(Locale.ROOT);
         Type type = switch (typeRaw) {
-            case "LOOT_AMOUNT", "COLLECT_LOOT" -> Type.LOOT_AMOUNT;
-            case "NODES_COMPLETED", "COMPLETE_NODES" -> Type.NODES_COMPLETED;
+            case "BREAK_BLOCK", "BREAK", "СЛОМАТЬ" -> Type.BREAK_BLOCK;
+            case "LOOT_AMOUNT", "COLLECT_LOOT", "MINE", "ДОБЫТЬ" -> Type.LOOT_AMOUNT;
+            case "OBTAIN_ITEM", "OBTAIN", "GET", "ПОЛУЧИТЬ" -> Type.OBTAIN_ITEM;
+            case "NODES_COMPLETED", "COMPLETE_NODES", "NODES" -> Type.NODES_COMPLETED;
             default -> throw new IllegalArgumentException(
                     where + "задание '" + id + "': неизвестный type='" + typeRaw
-                            + "' (допустимо: COLLECT_LOOT/LOOT_AMOUNT или COMPLETE_NODES/NODES_COMPLETED)");
+                            + "' (допустимо: BREAK_BLOCK, LOOT_AMOUNT/COLLECT_LOOT, OBTAIN_ITEM, NODES_COMPLETED/COMPLETE_NODES)");
         };
 
         String material = str(raw.get("material")).toUpperCase(Locale.ROOT);
-        if (type == Type.LOOT_AMOUNT && material.isBlank()) {
-            throw new IllegalArgumentException(where + "задание '" + id + "': для LOOT_AMOUNT нужен material");
+        if (type != Type.NODES_COMPLETED && material.isBlank()) {
+            throw new IllegalArgumentException(where + "задание '" + id + "': для " + type + " нужен material (или ANY)");
         }
 
         int amount = num(raw.get("amount"), -1);
-        if (amount <= 0) throw new IllegalArgumentException(where + "задание '" + id + "': amount должен быть > 0");
+        if (amount < 1 || amount > MAX_AMOUNT) {
+            throw new IllegalArgumentException(where + "задание '" + id + "': amount должен быть от 1 до " + MAX_AMOUNT);
+        }
 
         int reward = num(raw.get("reward"), -1);
         if (reward < 0) throw new IllegalArgumentException(where + "задание '" + id + "': reward должен быть >= 0");
@@ -61,7 +92,17 @@ public final class QuestDef {
         if (title.isBlank()) title = id;
         String description = str(raw.get("description"));
 
-        return new QuestDef(id, type, material.isBlank() ? null : material, amount, title, description, reward);
+        return new QuestDef(id, type, type == Type.NODES_COMPLETED || material.isBlank() ? null : material,
+                amount, title, description, reward);
+    }
+
+    public String actionLabelRu() {
+        return switch (type) {
+            case BREAK_BLOCK -> "Сломать";
+            case LOOT_AMOUNT -> "Добыть";
+            case OBTAIN_ITEM -> "Получить";
+            case NODES_COMPLETED -> "Разработать узлов";
+        };
     }
 
     static String str(Object v) { return v == null ? "" : String.valueOf(v).trim(); }

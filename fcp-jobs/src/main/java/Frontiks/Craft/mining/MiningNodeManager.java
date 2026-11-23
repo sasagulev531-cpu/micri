@@ -496,6 +496,9 @@ public final class MiningNodeManager {
             outlineDirty.add(node.id);
 
             if (result == NodeLogic.BreakResult.ADVANCED) {
+                if (HrabotaConfig.contains(e.getBlock().getLocation()) && WorkManager.isWorking(p)) {
+                    quests.applyBlockBreak(p, current.name(), 1);
+                }
                 return;
             }
 
@@ -513,7 +516,7 @@ public final class MiningNodeManager {
                         plugin.getLogger().severe("Не удалось начислить деньги смены за узел " + node.id + ": " + t);
                     }
                 }
-                quests.applyNodeCompletion(p, drops, 1);
+                quests.applyNodeCompletion(p, current.name(), drops, 1);
             }
         }
 

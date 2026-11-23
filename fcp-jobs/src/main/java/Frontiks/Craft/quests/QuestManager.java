@@ -14,16 +14,17 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Хранение и начисление заданий шахтёра (mining-quests.yml).
  * Прогресс привязан к игроку (UUID), переживает relog/restart, награда — ровно один раз.
- * Все методы выполняются на main thread; файл сохраняется при каждом начислении (дёшево: данные игроков маленькие).
  */
 public final class QuestManager {
 
@@ -106,6 +107,7 @@ public final class QuestManager {
         lock.lock();
         try {
             if (config == null || file == null) return;
+            config.set("players", null);
             for (Map.Entry<UUID, Map<QuestBoard.Period, Bucket>> e : data.entrySet()) {
                 String path = "players." + e.getKey();
                 writeBucket(path + ".daily", e.getValue().get(QuestBoard.Period.DAILY));
@@ -128,7 +130,7 @@ public final class QuestManager {
         config.set(path + ".quests", list);
     }
 
-    /** Возвращает отображение заданий игрока на текущий период (назначает новые при смене периода). */
+    /** Возвращает отображение заданий игрока на текущий период (назначает новые при смене периода или нехватке). */
     public List<ResolvedQuest> resolvedQuests(Player player) {
         lock.lock();
         try {
@@ -139,28 +141,86 @@ public final class QuestManager {
         }
     }
 
-    /**
-     * Начисляет прогресс за завершённый узел/лут. Вызывать ТОЛЬКО когда выплата за узел подтверждена
-     * (после лута), и только для игроков на активной смене (гейт — на стороне вызывающего).
-     */
+    /** Начисляет прогресс за ломку блока/стадии в шахте (для типа СЛОМАТЬ / BREAK_BLOCK). */
+    public void applyBlockBreak(Player player, String blockMaterial, int brokenCount) {
+        if (!settings.questsEnabled() || blockMaterial == null || brokenCount <= 0) return;
+        applyEvent(player, Map.of(blockMaterial.toUpperCase(), brokenCount), Map.of(), Map.of(), 0);
+    }
+
+    /** Начисляет прогресс за получение предмета (например, из печи для типа ПОЛУЧИТЬ / OBTAIN_ITEM). */
+    public void applyItemObtained(Player player, String itemMaterial, int count) {
+        if (!settings.questsEnabled() || itemMaterial == null || count <= 0) return;
+        applyEvent(player, Map.of(), Map.of(), Map.of(itemMaterial.toUpperCase(), count), 0);
+    }
+
+    /** Совместимый вызов завершения узла. */
     public void applyNodeCompletion(Player player, Map<String, Integer> lootCounts, int nodesCompleted) {
+        applyNodeCompletion(player, null, lootCounts, nodesCompleted);
+    }
+
+    /** Полное завершение узла: засчитывает сломанный блок последней стадии, добытый лут, полученные предметы и сам узел. */
+    public void applyNodeCompletion(Player player, String brokenStageMaterial,
+                                    Map<String, Integer> lootCounts, int nodesCompleted) {
         if (!settings.questsEnabled()) return;
+        Map<String, Integer> broken = (brokenStageMaterial == null || brokenStageMaterial.isBlank())
+                ? Map.of()
+                : Map.of(brokenStageMaterial.toUpperCase(), 1);
+        Map<String, Integer> safeLoot = lootCounts == null ? Map.of() : lootCounts;
+        applyEvent(player, broken, safeLoot, safeLoot, nodesCompleted);
+    }
+
+    private void applyEvent(Player player,
+                            Map<String, Integer> brokenBlocks,
+                            Map<String, Integer> lootCounts,
+                            Map<String, Integer> obtainedItems,
+                            int nodesCompleted) {
         UUID uuid = player.getUniqueId();
         long now = System.currentTimeMillis();
         lock.lock();
         try {
             ensureAssignments(uuid, now);
             Map<QuestBoard.Period, Bucket> perPeriod = data.computeIfAbsent(uuid, k -> new HashMap<>());
-            var zone = settings.zoneId();
+            boolean anyChanged = false;
 
             for (QuestBoard.Period period : QuestBoard.Period.values()) {
                 Bucket bucket = perPeriod.computeIfAbsent(period, k -> new Bucket());
                 Map<String, QuestDef> defs = period == QuestBoard.Period.DAILY ? settings.dailyDefs() : settings.weeklyDefs();
                 QuestBoard.ApplyResult result = QuestBoard.applyProgress(
-                        bucket.quests, defs, lootCounts, nodesCompleted,
+                        bucket.quests, defs, brokenBlocks, lootCounts, obtainedItems, nodesCompleted,
                         (questId, reward) -> payout(uuid, questId, reward));
+                if (!result.completedNow().isEmpty() || !result.paidNow().isEmpty()
+                        || !result.payFailed().isEmpty() || !result.inProgress().isEmpty()) {
+                    anyChanged = true;
+                }
                 report(player, period, result, defs);
             }
+            if (anyChanged) {
+                saveAll();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Синхронизирует активные назначения всех игроков с обновлённым пулом (удаляет удалённые и добирает недостающие). */
+    public void syncPoolsAndTopUp() {
+        lock.lock();
+        try {
+            long now = System.currentTimeMillis();
+            for (UUID uuid : new ArrayList<>(data.keySet())) {
+                ensureAssignments(uuid, now);
+            }
+            saveAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** Принудительно перевыдаёт задачи всем игрокам заново из текущего пула (/quests reroll). */
+    public void forceRerollAll() {
+        lock.lock();
+        try {
+            data.clear();
             saveAll();
         } finally {
             lock.unlock();
@@ -230,34 +290,42 @@ public final class QuestManager {
         }
     }
 
-    /** Гарантирует, что у игрока есть назначения на текущие суточный/недельный периоды. */
+    /** Гарантирует, что у игрока есть назначения на текущие суточный/недельный периоды и добирает новые при добавлении в пул. */
     private void ensureAssignments(UUID uuid, long nowMs) {
         var zone = settings.zoneId();
         Map<QuestBoard.Period, Bucket> perPeriod = data.computeIfAbsent(uuid, k -> new HashMap<>());
 
-        Bucket daily = perPeriod.computeIfAbsent(QuestBoard.Period.DAILY, k -> new Bucket());
-        Bucket weekly = perPeriod.computeIfAbsent(QuestBoard.Period.WEEKLY, k -> new Bucket());
+        ensureBucket(perPeriod.computeIfAbsent(QuestBoard.Period.DAILY, k -> new Bucket()),
+                QuestBoard.periodKey(QuestBoard.Period.DAILY, zone, nowMs),
+                settings.dailyPool(), settings.dailyDefs(), settings.dailyCount());
 
-        String dailyKey = QuestBoard.periodKey(QuestBoard.Period.DAILY, zone, nowMs);
-        String weeklyKey = QuestBoard.periodKey(QuestBoard.Period.WEEKLY, zone, nowMs);
+        ensureBucket(perPeriod.computeIfAbsent(QuestBoard.Period.WEEKLY, k -> new Bucket()),
+                QuestBoard.periodKey(QuestBoard.Period.WEEKLY, zone, nowMs),
+                settings.weeklyPool(), settings.weeklyDefs(), settings.weeklyCount());
+    }
 
-        if (!dailyKey.equals(daily.period)) {
-            daily.period = dailyKey;
-            daily.quests = settings.dailyPool().isEmpty()
+    private void ensureBucket(Bucket bucket, String currentKey,
+                              List<QuestDef> pool, Map<String, QuestDef> defs, int targetCount) {
+        Random rng = new Random();
+        if (!currentKey.equals(bucket.period)) {
+            bucket.period = currentKey;
+            bucket.quests = pool.isEmpty()
                     ? new ArrayList<>()
-                    : QuestBoard.assign(settings.dailyPool(), settings.dailyCount(), new java.util.Random());
-            if (daily.quests.isEmpty()) {
-                plugin.getLogger().warning("Пул ежедневных заданий пуст — игрок " + uuid + " не получил заданий");
-            }
+                    : new ArrayList<>(QuestBoard.assign(pool, targetCount, rng));
+            return;
         }
-        if (!weeklyKey.equals(weekly.period)) {
-            weekly.period = weeklyKey;
-            weekly.quests = settings.weeklyPool().isEmpty()
-                    ? new ArrayList<>()
-                    : QuestBoard.assign(settings.weeklyPool(), settings.weeklyCount(), new java.util.Random());
-            if (weekly.quests.isEmpty()) {
-                plugin.getLogger().warning("Пул недельных заданий пуст — игрок " + uuid + " не получил заданий");
+        // Убираем удалённые из конфига задания
+        bucket.quests.removeIf(a -> !defs.containsKey(a.id));
+        // Добираем недостающие слоты, если админ добавил новые задачи в пул или увеличил лимит
+        int want = Math.min(targetCount, pool.size());
+        if (bucket.quests.size() < want) {
+            Set<String> existing = new HashSet<>();
+            for (QuestAssignment a : bucket.quests) existing.add(a.id);
+            List<QuestDef> candidates = new ArrayList<>();
+            for (QuestDef d : pool) {
+                if (!existing.contains(d.id)) candidates.add(d);
             }
+            bucket.quests.addAll(QuestBoard.assign(candidates, want - bucket.quests.size(), rng));
         }
     }
 

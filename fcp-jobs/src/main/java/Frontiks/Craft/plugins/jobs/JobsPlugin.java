@@ -88,7 +88,7 @@ public final class JobsPlugin extends JavaPlugin {
         pm.registerEvents(new MiningListener(this, this.nodeManager), this);
         pm.registerEvents(new MiningNodeMenuListener(this, this.nodeManager), this);
         pm.registerEvents(new QuestsMenuListener(this.questManager, settings), this);
-        pm.registerEvents(new BlockBreakListener(this, this.nodeManager), this);
+        pm.registerEvents(new BlockBreakListener(this, this.nodeManager, this.questManager), this);
 
         // Предзагружаем ключевые классы при старте
         WorkManager.class.getName();

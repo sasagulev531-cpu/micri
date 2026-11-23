@@ -1,31 +1,36 @@
 package Frontiks.Craft.work;
 
-import org.bukkit.plugin.java.JavaPlugin;
-import Frontiks.Craft.utils.color;
-import org.bukkit.Bukkit;
+import Frontiks.Craft.quests.QuestManager;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 public class BlockBreakListener implements Listener {
 
     private final JavaPlugin plugin;
     private final Frontiks.Craft.mining.MiningNodeManager nodeManager;
+    private final QuestManager questManager;
 
     public BlockBreakListener(JavaPlugin plugin) {
-        this(plugin, null);
+        this(plugin, null, null);
     }
 
     public BlockBreakListener(JavaPlugin plugin, Frontiks.Craft.mining.MiningNodeManager nodeManager) {
+        this(plugin, nodeManager, null);
+    }
+
+    public BlockBreakListener(JavaPlugin plugin,
+                              Frontiks.Craft.mining.MiningNodeManager nodeManager,
+                              QuestManager questManager) {
         this.plugin = plugin;
         this.nodeManager = nodeManager;
+        this.questManager = questManager;
     }
 
     @EventHandler
@@ -33,7 +38,7 @@ public class BlockBreakListener implements Listener {
         // Не считаем отменённые другими плагинами/механиками события.
         if (e.isCancelled()) return;
 
-        // Блоки настраиваемых узлов обслуживает MiningNodeListener.
+        // Блоки настраиваемых узлов обслуживает MiningListener.
         if (nodeManager != null && nodeManager.isMiningNode(e.getBlock().getLocation())) return;
 
         Player p = e.getPlayer();
@@ -65,8 +70,11 @@ public class BlockBreakListener implements Listener {
 
         Material ore = b.getType();
 
-        int money = getOrePrice(b.getType());
+        int money = getOrePrice(ore);
         WorkManager.add(p, money);
+        if (questManager != null) {
+            questManager.applyBlockBreak(p, ore.name(), 1);
+        }
 
         b.setType(Material.COBBLESTONE);
 

@@ -1,16 +1,16 @@
 package Frontiks.Craft.listeners;
 
-import Frontiks.Craft.work.WorkManager;
-import Frontiks.Craft.gui.WorkMenu;
 import Frontiks.Craft.gui.MenuManager;
+import Frontiks.Craft.gui.WorkMenu;
 import Frontiks.Craft.utils.color;
+import Frontiks.Craft.work.WorkManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 
 public class WorkMenuListener implements Listener {
 
@@ -27,16 +27,18 @@ public class WorkMenuListener implements Listener {
 
         e.setCancelled(true);
 
-        int slot = e.getSlot();
+        // Игнорируем клики по собственному нижнему инвентарю игрока
+        if (e.getRawSlot() < 0 || e.getRawSlot() >= 27) {
+            return;
+        }
 
-        // Слот 12 - Магазин кирок (открываем DM меню)
+        int slot = e.getRawSlot();
+
+        // Слот 12 - Задачи шахтёра (на месте старого магазина кирок)
         if (slot == 12) {
-            // Закрываем наше меню
             p.closeInventory();
-            // Удаляем игрока из нашего меню
             MenuManager.removeMenu(p.getUniqueId());
-            // Открываем DM меню
-            Bukkit.dispatchCommand(p, "dm open kirka");
+            Bukkit.dispatchCommand(p, "quests");
             return;
         }
 
@@ -55,13 +57,6 @@ public class WorkMenuListener implements Listener {
 
             p.closeInventory();
             WorkMenu.open(p);
-            return;
-        }
-
-        // Слот 16 - Задания шахтёра
-        if (slot == 16) {
-            p.closeInventory();
-            Bukkit.dispatchCommand(p, "quests");
         }
     }
 
@@ -78,7 +73,6 @@ public class WorkMenuListener implements Listener {
     public void onClose(InventoryCloseEvent e) {
         if (!(e.getPlayer() instanceof Player p)) return;
 
-        // Удаляем игрока из меню при закрытии только если он был в меню работы
         if (MenuManager.isInMenu(p.getUniqueId(), WorkMenu.MENU_ID)) {
             MenuManager.removeMenu(p.getUniqueId());
         }

@@ -6,13 +6,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.FurnaceExtractEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
-import java.util.List;
-
-/** Обработчик кликов GUI заданий. Каждая клетка либо отменена, либо выполняет действие. */
+/** Обработчик кликов GUI заданий и событий получения предметов (переплавка в печи). */
 public final class QuestsMenuListener implements Listener {
 
     private final QuestManager quests;
@@ -56,6 +55,14 @@ public final class QuestsMenuListener implements Listener {
         if (e.getPlayer() instanceof Player p
                 && MenuManager.isInMenu(p.getUniqueId(), QuestsMenu.MENU_ID)) {
             MenuManager.removeMenu(p.getUniqueId());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onFurnaceExtract(FurnaceExtractEvent e) {
+        Player p = e.getPlayer();
+        if (p != null && e.getItemType() != null && e.getItemAmount() > 0) {
+            quests.applyItemObtained(p, e.getItemType().name(), e.getItemAmount());
         }
     }
 
