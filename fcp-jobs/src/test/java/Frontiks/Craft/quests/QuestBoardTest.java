@@ -146,7 +146,10 @@ class QuestBoardTest {
         assertEquals(QuestDef.Type.OBTAIN_ITEM, qGet.type);
 
         Map<String, QuestDef> defs = Map.of(qBreak.id, qBreak, qGet.id, qGet);
-        List<QuestAssignment> active = List.of(new QuestAssignment(qBreak.id), new QuestAssignment(qGet.id));
+        List<QuestAssignment> active = List.of(
+                new QuestAssignment(qBreak.id, true),
+                new QuestAssignment(qGet.id, true)
+        );
         AtomicInteger paid = new AtomicInteger();
 
         var r1 = QuestBoard.applyProgress(

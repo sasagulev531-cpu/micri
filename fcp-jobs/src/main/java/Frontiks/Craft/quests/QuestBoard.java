@@ -120,6 +120,21 @@ public final class QuestBoard {
         return applyEvent(active, defs, ev, sink);
     }
 
+    public static ApplyResult applyProgress(List<QuestAssignment> active, Map<String, QuestDef> defs,
+                                            Map<String, Integer> brokenBlocks,
+                                            Map<String, Integer> lootCounts,
+                                            Map<String, Integer> obtainedItems,
+                                            int nodesCompleted,
+                                            PayoutSink sink) {
+        QuestEvent ev = new QuestEvent(true,
+                brokenBlocks == null ? Map.of() : brokenBlocks,
+                lootCounts == null ? Map.of() : lootCounts,
+                obtainedItems == null ? Map.of() : obtainedItems,
+                Map.of(),
+                nodesCompleted, 0);
+        return applyEvent(active, defs, ev, sink);
+    }
+
     /**
      * Основной обработчик прогресса:
      * 1) Если задание требует взятия (requireAccept=true) и игрок его НЕ взял (accepted=false) — пропускается!
