@@ -156,7 +156,7 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
             for (int i = 0; i < node.loot.size(); i++) {
                 LootEntry e = node.loot.get(i);
                 p.sendMessage(color.color("&8" + (i + 1) + ". &f" + e.material + " &7x" + e.min + "–" + e.max
-                        + " &8(" + Math.round(e.chance * 100) + "%)"));
+                        + " &8(" + LootEntry.formatPercent(e.chance) + ")"));
             }
         }
     }
@@ -271,7 +271,7 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
                 for (int i = 0; i < current.size(); i++) {
                     LootEntry e = current.get(i);
                     p.sendMessage(color.color("&8" + (i + 1) + ". &f" + e.material + " &7x" + e.min + "–" + e.max
-                            + " &8(" + Math.round(e.chance * 100) + "%)"));
+                            + " &8(" + LootEntry.formatPercent(e.chance) + ")"));
                 }
             }
             return;

@@ -442,6 +442,13 @@ public final class MiningNodeManager {
 
         MiningNode node = getNodeAt(e.getBlock().getLocation());
         if (node == null) {
+            if (p.getGameMode() != org.bukkit.GameMode.CREATIVE
+                    && p.getGameMode() != org.bukkit.GameMode.SPECTATOR
+                    && !WorkManager.isWorking(p)
+                    && HrabotaConfig.contains(e.getBlock().getLocation())) {
+                e.setCancelled(true);
+                WorkManager.notifyNeedJob(p);
+            }
             return; // обычный блок — не наша механика
         }
 
@@ -452,6 +459,11 @@ public final class MiningNodeManager {
         }
 
         e.setCancelled(true); // никакого ванильного дропа/XP по узлам
+
+        if (!WorkManager.isWorking(p)) {
+            WorkManager.notifyNeedJob(p);
+            return;
+        }
 
         if (node.broken) {
             throttledMessage(p, "&cЭтот узел отключён из-за изменения блока. Нужен администратор (/miningnode validate).", 5000);

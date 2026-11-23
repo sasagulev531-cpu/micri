@@ -49,6 +49,11 @@ public final class MiningListener implements Listener {
             e.setCancelled(true);
             return;
         }
+        if (p.getGameMode() != org.bukkit.GameMode.CREATIVE
+                && Frontiks.Craft.work.HrabotaConfig.contains(e.getBlock().getLocation())) {
+            e.setCancelled(true);
+            return;
+        }
         manager.markNeighborsChanged(e.getBlock().getLocation());
     }
 
@@ -87,6 +92,15 @@ public final class MiningListener implements Listener {
         Player p = e.getPlayer();
         if (MiningWand.isWand(plugin, p.getInventory().getItemInMainHand())) {
             e.setCancelled(true);
+            return;
+        }
+        if (p.getGameMode() != org.bukkit.GameMode.CREATIVE
+                && p.getGameMode() != org.bukkit.GameMode.SPECTATOR
+                && !Frontiks.Craft.work.WorkManager.isWorking(p)
+                && (manager.isMiningNode(e.getBlock().getLocation())
+                || Frontiks.Craft.work.HrabotaConfig.contains(e.getBlock().getLocation()))) {
+            e.setCancelled(true);
+            Frontiks.Craft.work.WorkManager.notifyNeedJob(p);
         }
     }
 

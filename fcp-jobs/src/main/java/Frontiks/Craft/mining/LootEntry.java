@@ -46,4 +46,21 @@ public final class LootEntry {
     static double parseDouble(String s, double fallback) {
         try { return Double.parseDouble(s.trim()); } catch (Exception e) { return fallback; }
     }
+
+    /** Точное отображение шанса без грубого округления (например 0.90 -> 90%, 0.006 -> 0.6%). */
+    public static String formatPercent(double chance) {
+        double pct = chance * 100.0;
+        if (Math.abs(pct - Math.rint(pct)) < 1e-6) {
+            return ((long) Math.rint(pct)) + "%";
+        }
+        String formatted = String.format(java.util.Locale.US, "%.3f", pct);
+        while (formatted.contains(".") && (formatted.endsWith("0") || formatted.endsWith("."))) {
+            if (formatted.endsWith(".")) {
+                formatted = formatted.substring(0, formatted.length() - 1);
+                break;
+            }
+            formatted = formatted.substring(0, formatted.length() - 1);
+        }
+        return formatted + "%";
+    }
 }

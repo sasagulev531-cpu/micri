@@ -103,7 +103,7 @@ public final class MiningNodeMenu {
             for (int i = 0; i < node.loot.size(); i++) {
                 LootEntry e = node.loot.get(i);
                 lootLore.add("&8" + (i + 1) + ". &f" + e.material + " &7x" + e.min + "–" + e.max
-                        + " &8(" + Math.round(e.chance * 100) + "%)");
+                        + " &8(" + LootEntry.formatPercent(e.chance) + ")");
             }
         }
         inv.setItem(20, named(Material.CHEST, "&6Лут узла", lootLore));

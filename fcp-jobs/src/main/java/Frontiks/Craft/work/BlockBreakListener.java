@@ -38,7 +38,15 @@ public class BlockBreakListener implements Listener {
 
         Player p = e.getPlayer();
 
-        if (!WorkManager.isWorking(p)) return;
+        if (!WorkManager.isWorking(p)) {
+            if (p.getGameMode() != org.bukkit.GameMode.CREATIVE
+                    && p.getGameMode() != org.bukkit.GameMode.SPECTATOR
+                    && inRegion(e.getBlock().getLocation())) {
+                e.setCancelled(true);
+                WorkManager.notifyNeedJob(p);
+            }
+            return;
+        }
 
         if (!inRegion(p.getLocation())) {
             WorkManager.stop(p);

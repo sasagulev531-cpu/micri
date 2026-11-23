@@ -25,9 +25,6 @@ public class WorkMenu {
     public static void open(Player p) {
         Inventory inv = Bukkit.createInventory(null, SIZE, color.color(TITLE));
 
-        // Запоминаем, что игрок в меню работы
-        MenuManager.setMenu(p.getUniqueId(), MENU_ID);
-
         // Фоновое стекло
         ItemStack glass = createGlass();
         for (int i = 0; i < SIZE; i++) {
@@ -47,6 +44,8 @@ public class WorkMenu {
         inv.setItem(4, createInfo(p));
 
         p.openInventory(inv);
+        // Запоминаем после openInventory, чтобы закрытие предыдущего GUI не стирало MENU_ID
+        MenuManager.setMenu(p.getUniqueId(), MENU_ID);
     }
 
     private static ItemStack createGlass() {
