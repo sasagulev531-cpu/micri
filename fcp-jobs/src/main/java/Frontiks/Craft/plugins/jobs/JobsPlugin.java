@@ -17,6 +17,7 @@ import Frontiks.Craft.mining.MiningNodeMenuListener;
 import Frontiks.Craft.mining.MiningNodeStore;
 import Frontiks.Craft.mining.MiningSettings;
 import Frontiks.Craft.quests.QuestManager;
+import Frontiks.Craft.quests.QuestsAdminCommand;
 import Frontiks.Craft.quests.QuestsCommand;
 import Frontiks.Craft.quests.QuestsMenuListener;
 import Frontiks.Craft.work.BlockBreakListener;
@@ -38,8 +39,13 @@ public final class JobsPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         HrabotaConfig.init(this);
+        WorkManager.init(this);
 
         MiningSettings settings = new MiningSettings(this);
+        for (String err : settings.configErrors()) {
+            getLogger().warning("[QuestsConfig] " + err);
+        }
+
         this.questManager = new QuestManager(this, settings);
         this.questManager.init();
 
@@ -80,17 +86,17 @@ public final class JobsPlugin extends JavaPlugin {
 
         bind("miningnode", new MiningNodeCommand(this, this.nodeManager));
         bind("quests", new QuestsCommand(this.questManager, settings));
+        bind("questsadmin", new QuestsAdminCommand(this.questManager, settings));
 
         var pm = getServer().getPluginManager();
         pm.registerEvents(new QuitListener(), this);
         pm.registerEvents(new WorkMenuListener(), this);
-        pm.registerEvents(new WorkCheckListener(this), this);
+        pm.registerEvents(new WorkCheckListener(this, this.questManager.actionReporter()), this);
         pm.registerEvents(new MiningListener(this, this.nodeManager), this);
         pm.registerEvents(new MiningNodeMenuListener(this, this.nodeManager), this);
         pm.registerEvents(new QuestsMenuListener(this, this.questManager, settings), this);
         pm.registerEvents(new BlockBreakListener(this, this.nodeManager, this.questManager), this);
 
-        // Предзагружаем ключевые классы при старте
         WorkManager.class.getName();
         WorkMenu.class.getName();
         MenuManager.class.getName();
@@ -117,6 +123,16 @@ public final class JobsPlugin extends JavaPlugin {
                 if (WorkManager.isWorking(p)) {
                     WorkManager.stop(p);
                 }
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            WorkManager.shutdown();
+        } catch (Throwable ignored) {
+        }
+        try {
+            if (this.questManager != null) {
+                this.questManager.shutdown();
             }
         } catch (Throwable ignored) {
         }

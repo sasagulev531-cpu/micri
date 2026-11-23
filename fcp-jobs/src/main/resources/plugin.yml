@@ -21,6 +21,10 @@ commands:
   quests:
     description: Меню заданий шахтёра
     permission: fcp.jobs.quests
+  questsadmin:
+    description: Диагностика и перезагрузка конфига заданий quests.yml
+    aliases: [qadmin]
+    permission: fcp.admin.jobs.quests
   hrabotagive1:
     description: Купить кирку уровня 1
   hrabotagive2:
@@ -47,6 +51,9 @@ permissions:
     default: op
   fcp.admin.jobs.node:
     description: Разрешает управлять добываемыми узлами шахты (/miningnode и маркер-палочка)
+    default: op
+  fcp.admin.jobs.quests:
+    description: Разрешает проверять и перезагружать quests.yml (/questsadmin)
     default: op
   fcp.jobs.quests:
     description: Разрешает открывать меню заданий шахтёра (/quests)

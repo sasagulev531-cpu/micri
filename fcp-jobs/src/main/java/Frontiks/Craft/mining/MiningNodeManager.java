@@ -133,6 +133,7 @@ public final class MiningNodeManager {
     // ----------------------------------------------------------------- accessors
 
     public MiningSettings settings() { return settings; }
+    public QuestManager quests() { return quests; }
 
     /** Очищает лут узла без валидации (явное действие админа, награда просто не будет выдаваться). */
     public void clearLoot(MiningNode node) {
@@ -498,7 +499,7 @@ public final class MiningNodeManager {
 
             if (result == NodeLogic.BreakResult.ADVANCED) {
                 if (HrabotaConfig.contains(e.getBlock().getLocation()) && WorkManager.isWorking(p)) {
-                    quests.applyBlockBreak(p, current.name(), 1);
+                    quests.applyBlockBreak(p, current.name(), 1, e.getBlock().getLocation());
                 }
                 return;
             }
@@ -517,7 +518,7 @@ public final class MiningNodeManager {
                         plugin.getLogger().severe("Не удалось начислить деньги смены за узел " + node.id + ": " + t);
                     }
                 }
-                quests.applyNodeCompletion(p, current.name(), drops, 1, reward);
+                quests.applyNodeCompletion(p, current.name(), drops, 1, reward, e.getBlock().getLocation());
             }
         }
 

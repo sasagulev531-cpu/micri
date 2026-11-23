@@ -1,13 +1,22 @@
 package Frontiks.Craft.mining;
 
+import Frontiks.Craft.actions.ActionKindRegistry;
+import Frontiks.Craft.api.FcpYamlStorage;
+import Frontiks.Craft.api.LegacyFiles;
+import Frontiks.Craft.jobs.JobRegistry;
 import Frontiks.Craft.quests.QuestDef;
 import Frontiks.Craft.quests.QuestStep;
+import Frontiks.Craft.quests.v2.QuestV2Models;
+import Frontiks.Craft.quests.v2.QuestsConfigParser;
 import Frontiks.Craft.work.HrabotaConfig;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,11 +26,13 @@ import java.util.Map;
 /**
  * Чтение и валидация:
  * - настроек узлов шахты из hrabota.yml;
- * - кастомных заданий и цепочек из отдельного файла plugins/FCP-Jobs/quests.yml.
+ * - конфига заданий v2 (и совместимого v1) из plugins/FCP-Jobs/quests.yml.
  */
 public final class MiningSettings {
 
     private final JavaPlugin plugin;
+    private final ActionKindRegistry actionRegistry;
+    private final JobRegistry jobRegistry;
 
     // mining
     private int cooldownSeconds = 45;
@@ -38,7 +49,10 @@ public final class MiningSettings {
     private int markerRefreshTicks = 40;
     private int pointsPerEdge = 4;
 
-    // quests (plugins/FCP-Jobs/quests.yml)
+    // quests v2
+    private QuestV2Models.QuestsConfig questsConfigV2 = QuestV2Models.QuestsConfig.empty();
+
+    // legacy v1 compatibility fields
     private boolean questsEnabled = true;
     private String timezone = "Europe/Moscow";
     private int dailyCount = 3;
@@ -49,13 +63,23 @@ public final class MiningSettings {
     private final List<String> configErrors = new ArrayList<>();
 
     public MiningSettings() {
-        this(null);
+        this(null, ActionKindRegistry.withBuiltins(), JobRegistry.withDefaultMiner());
     }
 
     public MiningSettings(JavaPlugin plugin) {
+        this(plugin, ActionKindRegistry.withBuiltins(), JobRegistry.withDefaultMiner());
+    }
+
+    public MiningSettings(JavaPlugin plugin, ActionKindRegistry actionRegistry, JobRegistry jobRegistry) {
         this.plugin = plugin;
+        this.actionRegistry = actionRegistry != null ? actionRegistry : ActionKindRegistry.withBuiltins();
+        this.jobRegistry = jobRegistry != null ? jobRegistry : JobRegistry.withDefaultMiner();
         reload();
     }
+
+    public ActionKindRegistry actionRegistry() { return actionRegistry; }
+    public JobRegistry jobRegistry() { return jobRegistry; }
+    public QuestV2Models.QuestsConfig questsConfigV2() { return questsConfigV2; }
 
     public void reload() {
         configErrors.clear();
@@ -89,77 +113,74 @@ public final class MiningSettings {
         reloadQuestsConfig();
     }
 
-    /** Загружает plugins/FCP-Jobs/quests.yml (создаёт дефолтный файл при первом запуске). */
+    /**
+     * Загружает plugins/FCP-Jobs/quests.yml через LegacyFiles.migrate + FcpYamlStorage.load.
+     * Если quests.yml отсутствует — копирует эталонный quests.example.yml (при наличии не переписывает, R10).
+     */
     private void reloadQuestsConfig() {
-        FileConfiguration qcfg = null;
+        QuestsConfigParser parser = new QuestsConfigParser(actionRegistry, jobRegistry);
+
         if (plugin != null) {
             try {
-                if (!plugin.getDataFolder().exists()) {
-                    plugin.getDataFolder().mkdirs();
+                File qFile = LegacyFiles.migrate(plugin, "quests.yml");
+                // Также сохраняем справочный quests.example.yml рядом, если его ещё нет
+                File exampleFile = new File(plugin.getDataFolder(), "quests.example.yml");
+                if (!exampleFile.exists()) {
+                    try (InputStream in = plugin.getResource("quests.example.yml")) {
+                        if (in != null) {
+                            Files.copy(in, exampleFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } catch (Exception ignored) {
+                    }
                 }
-                File qFile = new File(plugin.getDataFolder(), "quests.yml");
+
                 if (!qFile.exists()) {
-                    plugin.saveResource("quests.yml", false);
+                    try (InputStream in = plugin.getResource("quests.example.yml")) {
+                        if (in != null) {
+                            Files.copy(in, qFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        } else {
+                            plugin.saveResource("quests.yml", false);
+                        }
+                    }
                 }
-                qcfg = YamlConfiguration.loadConfiguration(qFile);
+
+                // Загружаем через FcpYamlStorage (соблюдение конвенции FCP-Core §1) + читаем текст для точных путей ошибок
+                FcpYamlStorage.load(plugin, qFile);
+                String rawYaml = Files.readString(qFile.toPath(), StandardCharsets.UTF_8);
+                QuestV2Models.ParseResult res = parser.parseYamlString(rawYaml, "quests.yml");
+                applyParsedQuests(res);
+                return;
             } catch (Exception e) {
                 configErrors.add("Не удалось прочитать plugins/FCP-Jobs/quests.yml: " + e.getMessage());
             }
         }
 
-        if (qcfg == null) {
-            FileConfiguration hcfg = HrabotaConfig.get();
-            if (hcfg != null && hcfg.isConfigurationSection("quests")) {
-                questsEnabled = hcfg.getBoolean("quests.enabled", true);
-                loadTimezone(hcfg.getString("quests.timezone", "Europe/Moscow"));
-                dailyCount = Math.max(1, Math.min(7, hcfg.getInt("quests.daily.count", 3)));
-                weeklyCount = Math.max(1, Math.min(7, hcfg.getInt("quests.weekly.count", 3)));
-                dailyPool = hcfg.contains("quests.daily.pool")
-                        ? parseQuestPool(hcfg.getMapList("quests.daily.pool"), "quests.daily.pool", false)
-                        : builtinDailyPool();
-                weeklyPool = hcfg.contains("quests.weekly.pool")
-                        ? parseQuestPool(hcfg.getMapList("quests.weekly.pool"), "quests.weekly.pool", true)
-                        : builtinWeeklyPool();
+        // Fallback для тестов без plugin-инстанса: читаем встроенный ресурс quests.example.yml
+        try (InputStream in = MiningSettings.class.getClassLoader().getResourceAsStream("quests.example.yml")) {
+            if (in != null) {
+                String yaml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                applyParsedQuests(parser.parseYamlString(yaml, "quests.example.yml"));
                 return;
             }
-            dailyPool = builtinDailyPool();
-            weeklyPool = builtinWeeklyPool();
-            return;
+        } catch (Exception ignored) {
         }
 
-        questsEnabled = qcfg.getBoolean("enabled", true);
-        loadTimezone(qcfg.getString("timezone", "Europe/Moscow"));
-        dailyCount = Math.max(1, Math.min(7, qcfg.getInt("daily.count", 3)));
-        weeklyCount = Math.max(1, Math.min(7, qcfg.getInt("weekly.count", 3)));
-
-        if (qcfg.contains("daily.pool")) {
-            dailyPool = parseQuestPool(qcfg.getMapList("daily.pool"), "quests.yml daily.pool", false);
-        } else {
-            dailyPool = builtinDailyPool();
-        }
-        if (qcfg.contains("weekly.pool")) {
-            weeklyPool = parseQuestPool(qcfg.getMapList("weekly.pool"), "quests.yml weekly.pool", true);
-        } else {
-            weeklyPool = builtinWeeklyPool();
-        }
+        questsConfigV2 = QuestV2Models.QuestsConfig.empty();
     }
 
-    private void loadTimezone(String tz) {
-        try {
-            ZoneId.of(tz);
-            timezone = tz.trim();
-        } catch (Exception e) {
-            configErrors.add("quests timezone='" + tz + "' невалиден — используется Europe/Moscow");
-            timezone = "Europe/Moscow";
-        }
+    private void applyParsedQuests(QuestV2Models.ParseResult res) {
+        this.questsConfigV2 = res.config();
+        this.configErrors.addAll(res.errors());
+        this.questsEnabled = questsConfigV2.enabled();
+        this.timezone = questsConfigV2.timezone().getId();
+        var dailyTpl = questsConfigV2.periods().get("daily");
+        var weeklyTpl = questsConfigV2.periods().get("weekly");
+        this.dailyCount = dailyTpl != null ? dailyTpl.count() : 3;
+        this.weeklyCount = weeklyTpl != null ? weeklyTpl.count() : 3;
     }
 
     public ZoneId zoneId() {
-        try {
-            return ZoneId.of(timezone);
-        } catch (Exception e) {
-            return ZoneId.of("Europe/Moscow");
-        }
+        return questsConfigV2 != null ? questsConfigV2.timezone() : ZoneId.of("Europe/Moscow");
     }
 
     public List<String> configErrors() { return List.copyOf(configErrors); }
@@ -233,18 +254,6 @@ public final class MiningSettings {
                 out.add(e);
             } catch (Exception ex) {
                 configErrors.add(where + " #" + (i + 1) + ": " + ex.getMessage());
-            }
-        }
-        return out;
-    }
-
-    private List<QuestDef> parseQuestPool(List<Map<?, ?>> rawList, String where, boolean weeklyDefaultAccept) {
-        List<QuestDef> out = new ArrayList<>();
-        for (int i = 0; i < rawList.size(); i++) {
-            try {
-                out.add(QuestDef.fromRaw(rawList.get(i), where + " #" + (i + 1), weeklyDefaultAccept));
-            } catch (IllegalArgumentException ex) {
-                configErrors.add(ex.getMessage());
             }
         }
         return out;

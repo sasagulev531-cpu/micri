@@ -24,7 +24,7 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of(
             "wand", "list", "info", "create", "delete", "restore", "restoreall",
-            "validate", "reload", "cooldown", "cooldownall", "loot", "lootall", "applyall", "help");
+            "validate", "questvalidate", "reload", "cooldown", "cooldownall", "loot", "lootall", "applyall", "help");
     private static final List<String> LOOT_SUB = List.of("list", "add", "remove", "clear");
 
     private final JavaPlugin plugin;
@@ -93,6 +93,11 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
             }
             case "validate" -> {
                 for (String line : manager.validateAll()) {
+                    p.sendMessage(color.color("&7- " + line));
+                }
+            }
+            case "questvalidate" -> {
+                for (String line : manager.quests().validateReport()) {
                     p.sendMessage(color.color("&7- " + line));
                 }
             }

@@ -2,6 +2,7 @@ package Frontiks.Craft.quests;
 
 import Frontiks.Craft.gui.MenuManager;
 import Frontiks.Craft.mining.MiningSettings;
+import Frontiks.Craft.quests.v2.QuestEngineV2;
 import Frontiks.Craft.utils.color;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -19,10 +20,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Обработчик:
- * - кликов в меню «Задачи шахтёра» (взятие задания ЛКМ, повтор выплаты, закрытие);
- * - переплавки руды в печи/плавильне (SMELT);
- * - крафта предметов на верстаке/в инвентаре (CRAFT) с защитой от дюпа счётчика.
+ * Слушатель:
+ * - кликов в 54-слотовом GUI «Задачи шахтёра» (взятие ЛКМ, пагинация, повтор выплат);
+ * - переплавки в печи/плавильне (SMELT);
+ * - крафта с антидюп-дельтой инвентаря/курсора (CRAFT).
  */
 public final class QuestsMenuListener implements Listener {
 
@@ -45,15 +46,24 @@ public final class QuestsMenuListener implements Listener {
         e.setCancelled(true);
 
         int slot = e.getRawSlot();
-        if (slot < 0 || slot >= 36) return;
+        if (slot < 0 || slot >= QuestsMenu.INV_SIZE) return;
 
-        if (slot == 31) {
-            var result = quests.retryPendingPayouts(p);
-            sendSummary(p, result);
-            new QuestsMenu(quests, settings).open(p);
+        int curPage = QuestsMenu.pageOf(p.getUniqueId());
+        if (slot == 45 && curPage > 0) {
+            new QuestsMenu(quests, settings).open(p, curPage - 1);
             return;
         }
-        if (slot == 35) {
+        if (slot == 53) {
+            new QuestsMenu(quests, settings).open(p, curPage + 1);
+            return;
+        }
+        if (slot == 49) {
+            var result = quests.retryPendingPayouts(p);
+            sendSummary(p, result);
+            new QuestsMenu(quests, settings).open(p, curPage);
+            return;
+        }
+        if (slot == 50) {
             p.closeInventory();
             return;
         }
@@ -61,13 +71,12 @@ public final class QuestsMenuListener implements Listener {
         String questId = QuestsMenu.questIdAt(p.getUniqueId(), slot);
         if (questId != null) {
             if (quests.acceptQuest(p, questId)) {
-                new QuestsMenu(quests, settings).open(p);
+                new QuestsMenu(quests, settings).open(p, curPage);
             } else {
-                // Если уже выполнено, но не оплачено — пробуем довыдать награду по клику
                 var result = quests.retryPendingPayouts(p);
                 if (!result.paidNow().isEmpty() || !result.payFailed().isEmpty()) {
                     sendSummary(p, result);
-                    new QuestsMenu(quests, settings).open(p);
+                    new QuestsMenu(quests, settings).open(p, curPage);
                 }
             }
         }
@@ -90,16 +99,15 @@ public final class QuestsMenuListener implements Listener {
         }
     }
 
-    /** Зачёт переплавки в печи / плавильне / коптильне (type: SMELT / OBTAIN). */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onFurnaceExtract(FurnaceExtractEvent e) {
         Player p = e.getPlayer();
         if (p != null && e.getItemType() != null && e.getItemAmount() > 0) {
-            quests.applyItemSmelted(p, e.getItemType().name(), e.getItemAmount());
+            quests.applyItemSmelted(p, e.getItemType().name(), e.getItemAmount(),
+                    e.getBlock() != null ? e.getBlock().getLocation() : p.getLocation());
         }
     }
 
-    /** Точный зачёт крафта без возможности накрутки при полном инвентаре (type: CRAFT / OBTAIN). */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onCraftItem(CraftItemEvent e) {
         if (!(e.getWhoClicked() instanceof Player p)) return;
@@ -142,7 +150,7 @@ public final class QuestsMenuListener implements Listener {
         return total;
     }
 
-    static void sendSummary(Player p, QuestBoard.ApplyResult result) {
+    static void sendSummary(Player p, QuestEngineV2.EngineResult result) {
         if (result.paidNow().isEmpty() && result.payFailed().isEmpty()) {
             p.sendMessage(color.color(
                     Frontiks.Craft.utils.Msg.PREFIX + "&7Нет невыплаченных наград."));
@@ -154,7 +162,7 @@ public final class QuestsMenuListener implements Listener {
         }
         for (String id : result.payFailed()) {
             p.sendMessage(color.color(
-                    Frontiks.Craft.utils.Msg.PREFIX + "&cНе удалось выплатить награду (" + id + "). Обратитесь к администрации."));
+                    Frontiks.Craft.utils.Msg.PREFIX + "&cНе удалось выплатить награду (" + id + "). Экономика недоступна."));
         }
     }
 }

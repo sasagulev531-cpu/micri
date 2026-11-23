@@ -1,5 +1,7 @@
 package Frontiks.Craft.listeners;
 
+import Frontiks.Craft.actions.ActionKindRegistry;
+import Frontiks.Craft.actions.ActionReporter;
 import Frontiks.Craft.utils.color;
 import Frontiks.Craft.work.HrabotaConfig;
 import Frontiks.Craft.work.WorkManager;
@@ -22,20 +24,24 @@ import org.bukkit.plugin.java.JavaPlugin;
 import static Frontiks.Craft.utils.Msg.PREFIX;
 
 /**
- * Гарантирует увольнение игрока с работы при выходе из зоны шахты ЛЮБЫМ способом:
- * пешком, телепортом (/spawn, /home, /tp, перл, хорус), порталом, сменой мира,
- * смертью/респавном, поездкой в вагонетке/лодке, киком + контрольная фоновая проверка.
+ * Контролирует выход игрока из зоны шахты любым способом + считает минуты активной смены (TIME_AS_JOB).
  */
 public class WorkCheckListener implements Listener {
 
     private final JavaPlugin plugin;
+    private final ActionReporter reporter;
 
     public WorkCheckListener() {
-        this(null);
+        this(null, null);
     }
 
     public WorkCheckListener(JavaPlugin plugin) {
+        this(plugin, null);
+    }
+
+    public WorkCheckListener(JavaPlugin plugin, ActionReporter reporter) {
         this.plugin = plugin;
+        this.reporter = reporter;
         if (plugin != null) {
             Bukkit.getScheduler().runTaskTimer(plugin, this::checkAllWorkingPlayers, 20L, 20L);
         }
@@ -120,8 +126,16 @@ public class WorkCheckListener implements Listener {
 
     private void checkAllWorkingPlayers() {
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (WorkManager.isWorking(p) && !inRegion(p.getLocation())) {
+            if (!WorkManager.isWorking(p)) continue;
+            if (!inRegion(p.getLocation())) {
                 fireFromWork(p);
+                continue;
+            }
+            // Накопление времени на активной смене в зоне шахты (§5.4 time)
+            int minutes = WorkManager.tickSecondAndDrainMinutes(p);
+            if (minutes > 0 && reporter != null) {
+                reporter.report(p, ActionKindRegistry.TIME_AS_JOB, null, minutes,
+                        p.getLocation(), true, WorkManager.currentJobId(p));
             }
         }
     }
