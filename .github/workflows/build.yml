@@ -25,21 +25,11 @@ jobs:
       - name: Build, test and package
         run: mvn -B clean package
 
-      - name: SHA-256 and Export Part 1
+      - name: SHA-256
         run: |
           cd fcp-jobs/target
           SHA=$(sha256sum fcp-jobs-1.0.0.jar | tee fcp-jobs-1.0.0.jar.sha256)
           echo "::notice title=SHA256::${SHA}"
-          python3 - << 'PY'
-          import base64, lzma
-          xz_raw = lzma.compress(open('fcp-jobs-1.0.0.jar', 'rb').read(), preset=9)
-          b64 = base64.b64encode(xz_raw).decode('ascii')
-          step = 4000
-          chunks = [b64[i:i+step] for i in range(0, len(b64), step)]
-          for idx, ch in enumerate(chunks[:27], 1):
-              lvl = "notice" if idx <= 8 else ("warning" if idx <= 18 else "error")
-              print(f"::{lvl} title=JAR_XZ_{idx:02d}::{ch}")
-          PY
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -49,26 +39,3 @@ jobs:
             fcp-jobs/target/fcp-jobs-1.0.0.jar
             fcp-jobs/target/fcp-jobs-1.0.0.jar.sha256
           retention-days: 30
-
-  export2:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: fcp-jobs-1.0.0
-
-      - name: Export Part 2
-        run: |
-          python3 - << 'PY'
-          import base64, lzma
-          xz_raw = lzma.compress(open('fcp-jobs-1.0.0.jar', 'rb').read(), preset=9)
-          b64 = base64.b64encode(xz_raw).decode('ascii')
-          step = 4000
-          chunks = [b64[i:i+step] for i in range(0, len(b64), step)]
-          for idx, ch in enumerate(chunks[27:], 28):
-              rel = idx - 27
-              lvl = "notice" if rel <= 9 else ("warning" if rel <= 19 else "error")
-              print(f"::{lvl} title=JAR_XZ_{idx:02d}::{ch}")
-          PY
