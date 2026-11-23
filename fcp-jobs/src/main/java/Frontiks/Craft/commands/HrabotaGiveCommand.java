@@ -1,6 +1,7 @@
 package Frontiks.Craft.commands;
 
 import Frontiks.Craft.api.EconomyService;
+import Frontiks.Craft.api.FcpServices;
 import org.bukkit.Material;
 import org.bukkit.command.*;
 import org.bukkit.enchantments.Enchantment;
@@ -13,10 +14,23 @@ import static Frontiks.Craft.utils.Msg.PREFIX;
 
 public class HrabotaGiveCommand implements CommandExecutor {
 
-    private final EconomyService economy;
+    private final EconomyService fixedEconomy;
+
+    public HrabotaGiveCommand() {
+        this.fixedEconomy = null;
+    }
 
     public HrabotaGiveCommand(EconomyService economy) {
-        this.economy = economy;
+        this.fixedEconomy = economy;
+    }
+
+    private EconomyService resolveEconomy() {
+        if (fixedEconomy != null) return fixedEconomy;
+        try {
+            return FcpServices.require(EconomyService.class);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     @Override
@@ -24,6 +38,12 @@ public class HrabotaGiveCommand implements CommandExecutor {
 
         if (!(sender instanceof Player)) return true;
         Player p = (Player) sender;
+
+        EconomyService economy = resolveEconomy();
+        if (economy == null) {
+            p.sendMessage(color("" + PREFIX + "§cСервис экономики (FCP-EconomyMarket) не подключён."));
+            return true;
+        }
 
         int price = 0;
         ItemStack pick = null;
@@ -71,7 +91,7 @@ public class HrabotaGiveCommand implements CommandExecutor {
         int balance = economy.getCoins(p.getUniqueId());
 
         if (balance < price) {
-            p.sendMessage(color(""+PREFIX+"§cНедостаточно монет"));
+            p.sendMessage(color("" + PREFIX + "§cНедостаточно монет"));
             return true;
         }
 
@@ -80,7 +100,7 @@ public class HrabotaGiveCommand implements CommandExecutor {
         for (ItemStack leftover : p.getInventory().addItem(pick).values()) {
             p.getWorld().dropItemNaturally(p.getLocation(), leftover);
         }
-        p.sendMessage(color(""+PREFIX+"§aВы приобрели кирку"));
+        p.sendMessage(color("" + PREFIX + "§aВы приобрели кирку"));
 
         return true;
     }

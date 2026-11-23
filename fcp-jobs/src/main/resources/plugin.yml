@@ -4,7 +4,8 @@ main: Frontiks.Craft.plugins.jobs.JobsPlugin
 api-version: '1.21'
 author: Frontiks
 description: FCP jobs and mine system
-depend: [FCP-Core, FCP-EconomyMarket]
+depend: [FCP-Core]
+softdepend: [FCP-EconomyMarket]
 commands:
   setgranic:
     description: Настройка зоны шахты

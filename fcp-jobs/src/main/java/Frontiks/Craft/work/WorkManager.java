@@ -3,7 +3,6 @@ package Frontiks.Craft.work;
 import Frontiks.Craft.api.EconomyService;
 import Frontiks.Craft.api.FcpServices;
 import org.bukkit.Bukkit;
-import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
 import java.util.HashMap;
@@ -64,7 +63,7 @@ public class WorkManager {
     }
 
     /**
-     * Показывает на экране «Устройтесь на работу!» и проигрывает недовольный звук жителя,
+     * Показывает на экране «Устройтесь на работу!» и проигрывает хмурый звук отказа жителя,
      * если игрок пытается копать в шахте без начатой смены.
      */
     public static void notifyNeedJob(Player p) {
@@ -80,6 +79,6 @@ public class WorkManager {
                 color("&fОткройте &e/work &fчтобы начать смену"),
                 5, 35, 10
         );
-        p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+        p.playSound(p.getLocation(), "minecraft:entity.villager.no", 1.0f, 1.0f);
     }
 }

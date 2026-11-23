@@ -1,12 +1,12 @@
 package Frontiks.Craft.plugins.jobs;
 
-import Frontiks.Craft.api.EconomyService;
-import Frontiks.Craft.api.FcpServices;
 import Frontiks.Craft.api.WorkService;
 import Frontiks.Craft.commands.FishingGiveCommand;
 import Frontiks.Craft.commands.HrabotaGiveCommand;
 import Frontiks.Craft.commands.SetGranicCommand;
 import Frontiks.Craft.commands.WorkMenuCommand;
+import Frontiks.Craft.gui.MenuManager;
+import Frontiks.Craft.gui.WorkMenu;
 import Frontiks.Craft.listeners.QuitListener;
 import Frontiks.Craft.listeners.WorkCheckListener;
 import Frontiks.Craft.listeners.WorkMenuListener;
@@ -68,12 +68,12 @@ public final class JobsPlugin extends JavaPlugin {
         bind("work", new WorkMenuCommand());
         bind("workmenu", new WorkMenuCommand());
 
-        HrabotaGiveCommand h = new HrabotaGiveCommand(FcpServices.require(EconomyService.class));
+        HrabotaGiveCommand h = new HrabotaGiveCommand();
         for (int i = 1; i <= 5; i++) {
             bind("hrabotagive" + i, h);
         }
 
-        FishingGiveCommand f = new FishingGiveCommand(FcpServices.require(EconomyService.class));
+        FishingGiveCommand f = new FishingGiveCommand();
         for (int i = 1; i <= 5; i++) {
             bind("fishinggive" + i, f);
         }
@@ -89,6 +89,11 @@ public final class JobsPlugin extends JavaPlugin {
         pm.registerEvents(new MiningNodeMenuListener(this, this.nodeManager), this);
         pm.registerEvents(new QuestsMenuListener(this.questManager, settings), this);
         pm.registerEvents(new BlockBreakListener(this, this.nodeManager), this);
+
+        // Предзагружаем ключевые классы при старте
+        WorkManager.class.getName();
+        WorkMenu.class.getName();
+        MenuManager.class.getName();
 
         getLogger().info("FCP Jobs enabled");
     }
@@ -107,15 +112,24 @@ public final class JobsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        for (Player p : getServer().getOnlinePlayers()) {
-            if (WorkManager.isWorking(p)) {
-                WorkManager.stop(p);
+        try {
+            for (Player p : getServer().getOnlinePlayers()) {
+                if (WorkManager.isWorking(p)) {
+                    WorkManager.stop(p);
+                }
             }
+        } catch (Throwable ignored) {
         }
-        if (this.nodeManager != null) {
-            this.nodeManager.shutdown();
+        try {
+            if (this.nodeManager != null) {
+                this.nodeManager.shutdown();
+            }
+        } catch (Throwable ignored) {
         }
-        HrabotaConfig.save();
+        try {
+            HrabotaConfig.save();
+        } catch (Throwable ignored) {
+        }
         getServer().getServicesManager().unregisterAll(this);
     }
 }

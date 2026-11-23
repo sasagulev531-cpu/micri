@@ -66,8 +66,7 @@ public class WorkMenu {
                         Bukkit.createProfile(UUID.randomUUID());
                 profile.setProperty(new com.destroystokyo.paper.profile.ProfileProperty("textures", texture));
                 meta.setPlayerProfile(profile);
-            } catch (Exception e) {
-                meta.setOwner("Frontiks");
+            } catch (Throwable ignored) {
             }
 
             meta.setDisplayName(color.color(displayName));

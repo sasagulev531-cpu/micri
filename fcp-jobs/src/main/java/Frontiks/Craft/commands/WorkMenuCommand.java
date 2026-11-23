@@ -2,6 +2,7 @@ package Frontiks.Craft.commands;
 
 import Frontiks.Craft.gui.WorkMenu;
 import Frontiks.Craft.utils.color;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -17,7 +18,13 @@ public class WorkMenuCommand implements CommandExecutor {
             return true;
         }
 
-        WorkMenu.open(p);
+        try {
+            WorkMenu.open(p);
+        } catch (Throwable t) {
+            Bukkit.getLogger().severe("[FCP-Jobs] Ошибка открытия /work: " + t);
+            t.printStackTrace();
+            p.sendMessage(color.color("&cОшибка открытия меню работы: &f" + t.getClass().getSimpleName() + ": " + t.getMessage()));
+        }
         return true;
     }
 }

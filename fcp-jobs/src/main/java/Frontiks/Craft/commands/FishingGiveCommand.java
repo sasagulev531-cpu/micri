@@ -1,6 +1,7 @@
 package Frontiks.Craft.commands;
 
 import Frontiks.Craft.api.EconomyService;
+import Frontiks.Craft.api.FcpServices;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.*;
@@ -14,10 +15,23 @@ import static Frontiks.Craft.utils.Msg.PREFIX;
 
 public class FishingGiveCommand implements CommandExecutor {
 
-    private final EconomyService economy;
+    private final EconomyService fixedEconomy;
+
+    public FishingGiveCommand() {
+        this.fixedEconomy = null;
+    }
 
     public FishingGiveCommand(EconomyService economy) {
-        this.economy = economy;
+        this.fixedEconomy = economy;
+    }
+
+    private EconomyService resolveEconomy() {
+        if (fixedEconomy != null) return fixedEconomy;
+        try {
+            return FcpServices.require(EconomyService.class);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     @Override
@@ -25,6 +39,12 @@ public class FishingGiveCommand implements CommandExecutor {
 
         if (!(sender instanceof Player)) return true;
         Player p = (Player) sender;
+
+        EconomyService economy = resolveEconomy();
+        if (economy == null) {
+            p.sendMessage(color("" + PREFIX + "§cСервис экономики (FCP-EconomyMarket) не подключён."));
+            return true;
+        }
 
         int price = 0;
         boolean donate = false;
@@ -84,7 +104,7 @@ public class FishingGiveCommand implements CommandExecutor {
         if (donate) {
 
             if (economy.getDCoins(p.getUniqueId()) < price) {
-                p.sendMessage(color(""+PREFIX+"§cНедостаточно Тюльпанов."));
+                p.sendMessage(color("" + PREFIX + "§cНедостаточно Тюльпанов."));
                 return true;
             }
 
@@ -93,7 +113,7 @@ public class FishingGiveCommand implements CommandExecutor {
         } else {
 
             if (economy.getCoins(p.getUniqueId()) < price) {
-                p.sendMessage(color(""+PREFIX+"§cНедостаточно монет."));
+                p.sendMessage(color("" + PREFIX + "§cНедостаточно монет."));
                 return true;
             }
 
@@ -103,7 +123,7 @@ public class FishingGiveCommand implements CommandExecutor {
         for (ItemStack leftover : p.getInventory().addItem(rod).values()) {
             p.getWorld().dropItemNaturally(p.getLocation(), leftover);
         }
-        p.sendMessage(color(""+PREFIX+"§fВы успешно купили удочку!"));
+        p.sendMessage(color("" + PREFIX + "§fВы успешно купили удочку!"));
 
         return true;
     }
