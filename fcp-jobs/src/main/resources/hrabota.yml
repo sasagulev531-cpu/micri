@@ -195,55 +195,7 @@ mining:
     points-per-edge: 4
 
 # ==============================================================================
-# Ежедневные и недельные задания шахтёра (пример баланса — числа можно менять)
+# Настройка всех заданий и цепочек вынесена в отдельный конфиг:
+#   plugins/FCP-Jobs/quests.yml
+# Перезагрузка конфига заданий без рестарта сервера: /mnode reload
 # ==============================================================================
-quests:
-  enabled: true
-  # Часовой пояс сброса заданий (понедельник 00:00 для недельных, 00:00 для дневных)
-  timezone: "Europe/Moscow"
-  daily:
-    count: 2
-    pool:
-      - id: daily_cobble_32
-        title: "Добыть 32 булыжника"
-        description: "Соберите булыжник с добываемых узлов шахты"
-        type: COLLECT_LOOT
-        material: COBBLESTONE
-        amount: 32
-        reward: 150
-      - id: daily_coal_8
-        title: "Найти 8 угля"
-        description: "Добудьте уголь при разработке узлов"
-        type: COLLECT_LOOT
-        material: COAL
-        amount: 8
-        reward: 200
-      - id: daily_nodes_10
-        title: "Разработать 10 узлов"
-        description: "Полностью пройдите все стадии 10 узлов"
-        type: COMPLETE_NODES
-        amount: 10
-        reward: 180
-  weekly:
-    count: 2
-    pool:
-      - id: weekly_cobble_256
-        title: "Добыть 256 булыжника за неделю"
-        description: "Крупная поставка булыжника с узлов шахты"
-        type: COLLECT_LOOT
-        material: COBBLESTONE
-        amount: 256
-        reward: 1000
-      - id: weekly_coal_48
-        title: "Найти 48 угля за неделю"
-        description: "Соберите уголь при полном разрушении узлов"
-        type: COLLECT_LOOT
-        material: COAL
-        amount: 48
-        reward: 1200
-      - id: weekly_nodes_75
-        title: "Разработать 75 узлов за неделю"
-        description: "Полностью пройдите все стадии 75 узлов"
-        type: COMPLETE_NODES
-        amount: 75
-        reward: 1500

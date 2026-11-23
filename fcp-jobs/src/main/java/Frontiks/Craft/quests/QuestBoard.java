@@ -13,27 +13,63 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 /**
- * Чистая логика заданий: выбор из пула, ключи периодов, начисление прогресса и выплата.
- * Выплата происходит ровно один раз на задание: paid ставится только после успешного
- * возврата true от PayoutSink (или остаётся false, и выплата будет повторена позже).
+ * Чистая логика заданий: выбор из пула, периоды, проверка «взято ли задание»,
+ * пошаговое прохождение цепочек (steps) и однократная выплата награды.
  */
 public final class QuestBoard {
 
     public enum Period { DAILY, WEEKLY }
 
-    /** Мост к экономике: возвращает true, если награда реально начислена. */
+    /** Мост к выдаче награды: возвращает true, если награда реально выдана. */
     public interface PayoutSink {
         boolean pay(String questId, int rewardCoins);
     }
 
-    public record ApplyResult(List<String> completedNow, List<String> paidNow,
-                              List<String> payFailed, List<String> inProgress) {
-        public static ApplyResult empty() { return new ApplyResult(List.of(), List.of(), List.of(), List.of()); }
+    /** Информация о переходе на следующий этап цепочки. */
+    public record StepAdvance(String questId, int completedStepNumber, int totalSteps, String nextStepTitle) {}
+
+    /** Универсальное событие действий игрока. */
+    public record QuestEvent(
+            boolean workingInMine,
+            Map<String, Integer> brokenBlocks,
+            Map<String, Integer> minedLoot,
+            Map<String, Integer> smeltedItems,
+            Map<String, Integer> craftedItems,
+            int nodesCompleted,
+            int coinsEarned
+    ) {
+        public static QuestEvent mineCompletion(boolean workingInMine,
+                                                String brokenBlock,
+                                                Map<String, Integer> loot,
+                                                int nodesCompleted,
+                                                int coinsEarned) {
+            Map<String, Integer> broken = (brokenBlock == null || brokenBlock.isBlank())
+                    ? Map.of()
+                    : Map.of(brokenBlock.toUpperCase(), 1);
+            return new QuestEvent(workingInMine, broken, loot == null ? Map.of() : loot,
+                    Map.of(), Map.of(), nodesCompleted, coinsEarned);
+        }
+    }
+
+    public record ApplyResult(
+            List<String> completedNow,
+            List<String> paidNow,
+            List<String> payFailed,
+            List<String> inProgress,
+            List<StepAdvance> stepAdvances
+    ) {
+        public ApplyResult(List<String> completedNow, List<String> paidNow,
+                           List<String> payFailed, List<String> inProgress) {
+            this(completedNow, paidNow, payFailed, inProgress, List.of());
+        }
+
+        public static ApplyResult empty() {
+            return new ApplyResult(List.of(), List.of(), List.of(), List.of(), List.of());
+        }
     }
 
     private QuestBoard() {}
 
-    /** Безопасный парсинг timezone из конфига с fallback. */
     public static ZoneId zoneOrDefault(String zoneId, ZoneId fallback) {
         try {
             return ZoneId.of(zoneId == null || zoneId.isBlank() ? fallback.getId() : zoneId.trim());
@@ -42,7 +78,6 @@ public final class QuestBoard {
         }
     }
 
-    /** Ключ периода: daily -> yyyy-MM-dd, weekly -> YYYY-Www (ISO-8601, неделя с понедельника). */
     public static String periodKey(Period period, ZoneId zone, long nowMs) {
         LocalDate date = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate();
         if (period == Period.DAILY) return date.toString();
@@ -51,7 +86,6 @@ public final class QuestBoard {
         return String.format("%04d-W%02d", weekYear, week);
     }
 
-    /** Момент сброса текущего периода (для отображения дедлайна), epoch ms. */
     public static long periodResetsAt(Period period, ZoneId zone, long nowMs) {
         java.time.ZonedDateTime now = Instant.ofEpochMilli(nowMs).atZone(zone);
         if (period == Period.DAILY) {
@@ -67,70 +101,105 @@ public final class QuestBoard {
                 .format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
     }
 
-    /** Случайный выбор count заданий из пула без повторов. Пул должен быть уже провалидирован. */
+    /** Случайный выбор count заданий из пула без повторов. Шахтёрские без requireAccept сразу активны. */
     public static List<QuestAssignment> assign(List<QuestDef> pool, int count, Random rng) {
         if (pool == null || pool.isEmpty() || count <= 0) return Collections.emptyList();
         List<QuestDef> copy = new ArrayList<>(pool);
         Collections.shuffle(copy, rng);
         return copy.stream().limit(Math.min(count, copy.size()))
-                .map(d -> new QuestAssignment(d.id))
+                .map(d -> new QuestAssignment(d.id, !d.requireAccept))
                 .collect(Collectors.toList());
     }
 
-    /** Совместимая перегрузка: лут засчитывается и в LOOT_AMOUNT, и в OBTAIN_ITEM. */
+    /** Обратная совместимость для существующих тестов (считаем, что игрок на смене в шахте). */
     public static ApplyResult applyProgress(List<QuestAssignment> active, Map<String, QuestDef> defs,
                                             Map<String, Integer> lootCounts, int nodesCompleted,
                                             PayoutSink sink) {
-        return applyProgress(active, defs, Map.of(), lootCounts, lootCounts, nodesCompleted, sink);
+        QuestEvent ev = new QuestEvent(true, Map.of(), lootCounts == null ? Map.of() : lootCounts,
+                Map.of(), Map.of(), nodesCompleted, 0);
+        return applyEvent(active, defs, ev, sink);
     }
 
     /**
-     * Полное начисление прогресса по всем 4 типам задач:
-     * - BREAK_BLOCK (сломать блок/стадию)
-     * - LOOT_AMOUNT (добыть ресурс с узла)
-     * - OBTAIN_ITEM (получить предмет с узла или из печи)
-     * - NODES_COMPLETED (полностью завершить узел)
+     * Основной обработчик прогресса:
+     * 1) Если задание требует взятия (requireAccept=true) и игрок его НЕ взял (accepted=false) — пропускается!
+     * 2) Проверяется ТОЛЬКО текущий шаг цепочки (stepIndex).
+     * 3) Если текущий шаг требует работы в шахте (requireWorking=true), а игрок не на смене — пропускается!
+     * 4) При достижении цели текущего шага — переход к следующему шагу (или завершение всего задания на последнем шаге).
      */
-    public static ApplyResult applyProgress(List<QuestAssignment> active, Map<String, QuestDef> defs,
-                                            Map<String, Integer> brokenBlocks,
-                                            Map<String, Integer> lootCounts,
-                                            Map<String, Integer> obtainedItems,
-                                            int nodesCompleted,
-                                            PayoutSink sink) {
+    public static ApplyResult applyEvent(List<QuestAssignment> active,
+                                         Map<String, QuestDef> defs,
+                                         QuestEvent event,
+                                         PayoutSink sink) {
         List<String> completedNow = new ArrayList<>();
         List<String> paidNow = new ArrayList<>();
         List<String> payFailed = new ArrayList<>();
         List<String> inProgress = new ArrayList<>();
-        if (active == null) return new ApplyResult(completedNow, paidNow, payFailed, inProgress);
+        List<StepAdvance> stepAdvances = new ArrayList<>();
+        if (active == null || defs == null || event == null) {
+            return new ApplyResult(completedNow, paidNow, payFailed, inProgress, stepAdvances);
+        }
 
         for (QuestAssignment a : active) {
             QuestDef def = defs.get(a.id);
-            if (def == null) continue; // задание убрали из конфига — молча пропускаем
+            if (def == null) continue;
 
             if (a.completed) {
                 if (!a.paid) tryPay(a, def, sink, paidNow, payFailed);
                 continue;
             }
 
-            int gain = switch (def.type) {
-                case BREAK_BLOCK -> countForMaterial(brokenBlocks, def.material);
-                case LOOT_AMOUNT -> countForMaterial(lootCounts, def.material);
-                case OBTAIN_ITEM -> countForMaterial(obtainedItems, def.material);
-                case NODES_COMPLETED -> Math.max(0, nodesCompleted);
-            };
+            // Если задание нужно сначала «взять», а игрок его не взял — прогресс НЕ идёт!
+            if (def.requireAccept && !a.accepted) {
+                continue;
+            }
+
+            int idx = Math.max(0, Math.min(a.stepIndex, def.steps.size() - 1));
+            a.stepIndex = idx;
+            QuestStep step = def.steps.get(idx);
+
+            if (step.requireWorking && !event.workingInMine()) {
+                continue;
+            }
+
+            int gain = computeGain(step, event);
             if (gain <= 0) continue;
 
-            long sum = (long) a.progress + gain;
-            a.progress = (int) Math.min(def.amount, sum);
-            if (a.progress >= def.amount && !a.completed) {
-                a.completed = true;
-                completedNow.add(def.id);
-                tryPay(a, def, sink, paidNow, payFailed);
+            long nextProg = (long) a.progress + gain;
+            a.progress = (int) Math.min(step.amount, nextProg);
+
+            if (a.progress >= step.amount) {
+                if (idx + 1 < def.steps.size()) {
+                    // Переход к следующему этапу цепочки!
+                    a.stepIndex = idx + 1;
+                    a.progress = 0;
+                    QuestStep nextStep = def.steps.get(a.stepIndex);
+                    stepAdvances.add(new StepAdvance(def.id, idx + 1, def.steps.size(), nextStep.title));
+                } else {
+                    // Последний этап цепочки выполнен -> задание завершено!
+                    a.completed = true;
+                    completedNow.add(def.id);
+                    tryPay(a, def, sink, paidNow, payFailed);
+                }
             } else {
-                inProgress.add(def.id + ": " + a.progress + "/" + def.amount);
+                inProgress.add(def.id + ": " + a.progress + "/" + step.amount);
             }
         }
-        return new ApplyResult(completedNow, paidNow, payFailed, inProgress);
+        return new ApplyResult(completedNow, paidNow, payFailed, inProgress, stepAdvances);
+    }
+
+    private static int computeGain(QuestStep step, QuestEvent event) {
+        return switch (step.type) {
+            case BREAK_BLOCK -> countForMaterial(event.brokenBlocks(), step.material);
+            case LOOT_AMOUNT -> countForMaterial(event.minedLoot(), step.material);
+            case SMELT_ITEM -> countForMaterial(event.smeltedItems(), step.material);
+            case CRAFT_ITEM -> countForMaterial(event.craftedItems(), step.material);
+            case OBTAIN_ITEM -> countForMaterial(event.minedLoot(), step.material)
+                    + countForMaterial(event.smeltedItems(), step.material)
+                    + countForMaterial(event.craftedItems(), step.material);
+            case NODES_COMPLETED -> Math.max(0, event.nodesCompleted());
+            case EARN_COINS -> Math.max(0, event.coinsEarned());
+        };
     }
 
     private static int countForMaterial(Map<String, Integer> counts, String targetMaterial) {
@@ -145,7 +214,6 @@ public final class QuestBoard {
         return Math.max(0, counts.getOrDefault(targetMaterial.toUpperCase(), 0));
     }
 
-    /** Ручной повторный запуск выплат за задания, которые уже выполнены, но не оплачены. */
     public static ApplyResult retryPendingPayouts(List<QuestAssignment> active, Map<String, QuestDef> defs,
                                                   PayoutSink sink) {
         List<String> paidNow = new ArrayList<>();
@@ -158,12 +226,12 @@ public final class QuestBoard {
                 }
             }
         }
-        return new ApplyResult(List.of(), paidNow, payFailed, List.of());
+        return new ApplyResult(List.of(), paidNow, payFailed, List.of(), List.of());
     }
 
     private static void tryPay(QuestAssignment a, QuestDef def, PayoutSink sink,
                                List<String> paidNow, List<String> payFailed) {
-        boolean ok = false;
+        boolean ok;
         try {
             ok = sink.pay(def.id, def.reward);
         } catch (Throwable t) {

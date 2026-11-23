@@ -19,8 +19,7 @@ commands:
     aliases: [mnode]
     permission: fcp.admin.jobs.node
   quests:
-    description: Ежедневные и недельные задания шахтёра
-    aliases: [miningquests, quest, zadachi]
+    description: Меню заданий шахтёра
     permission: fcp.jobs.quests
   hrabotagive1:
     description: Купить кирку уровня 1

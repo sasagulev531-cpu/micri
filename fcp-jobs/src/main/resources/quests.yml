@@ -1,0 +1,171 @@
+# ==============================================================================
+# FCP-Jobs — Конфигурация заданий шахтёра (plugins/FCP-Jobs/quests.yml)
+# Перезагрузка без рестарта сервера: /mnode reload
+# Подробная документация на GitHub в README.md
+#
+# ТИПЫ ЭТАПОВ (type):
+#   MINE           — добыть предмет из лута узлов шахты (material: RAW_IRON / COAL / ANY)
+#   BREAK          — сломать блок/стадию узла в шахте (material: STONE / TUFF / ANY)
+#   COMPLETE_NODES — полностью разработать N узлов шахты (material не нужен)
+#   SMELT          — переплавить и забрать предмет из печи/плавильни (material: IRON_INGOT и т.д.)
+#   CRAFT          — скрафтить предмет на верстаке/в инвентаре (material: IRON_BLOCK и т.д.)
+#   OBTAIN         — получить предмет любым способом: шахта, печь или крафт
+#   EARN_COINS     — заработать N монет за смену в шахте (material не нужен)
+#
+# КОЛИЧЕСТВО (amount): любое целое число от 1 до 65536 (2^16).
+#
+# ВЗЯТИЕ ЗАДАНИЯ (require-accept):
+#   false — прогресс идёт сразу автоматически (по умолчанию для обычных заданий шахты).
+#   true  — игрок должен сначала нажать ЛКМ «Взять задание» в меню /quests,
+#           иначе прогресс НЕ засчитывается (по умолчанию для всех еженедельных и цепочек).
+# ==============================================================================
+
+enabled: true
+
+# Часовой пояс сброса (00:00 для daily, понедельник 00:00 для weekly)
+timezone: "Europe/Moscow"
+
+# ==============================================================================
+# ЕЖЕДНЕВНЫЕ ЗАДАНИЯ (касаются шахты — выполняются сразу во время смены)
+# ==============================================================================
+daily:
+  # Сколько заданий из пула выдавать игроку на сутки (от 1 до 7)
+  count: 3
+  pool:
+    - id: daily_cobble_64
+      title: "&fГорная порода"
+      icon: COBBLESTONE
+      require-accept: false
+      reward: 200
+      description:
+        - "&7Базовая добыча камня на смене в шахте."
+      type: MINE
+      material: COBBLESTONE
+      amount: 64
+
+    - id: daily_coal_24
+      title: "&fТопливо для печей"
+      icon: COAL
+      require-accept: false
+      reward: 300
+      description:
+        - "&7Добудьте уголь из узлов шахты."
+      type: MINE
+      material: COAL
+      amount: 24
+
+    - id: daily_copper_20
+      title: "&fМедная жила"
+      icon: RAW_COPPER
+      require-accept: false
+      reward: 350
+      description:
+        - "&7Добудьте рудную медь, работая в шахте."
+      type: MINE
+      material: RAW_COPPER
+      amount: 20
+
+    - id: daily_nodes_15
+      title: "&fУдарник смены"
+      icon: IRON_PICKAXE
+      require-accept: false
+      reward: 400
+      description:
+        - "&7Полностью разработайте узлы в шахте."
+      type: COMPLETE_NODES
+      amount: 15
+
+# ==============================================================================
+# ЕЖЕНЕДЕЛЬНЫЕ СЛОЖНЫЕ ЗАДАНИЯ С ЦЕПОЧКОЙ ЭТАПОВ
+# Игрок должен ВЗЯТЬ задание в меню (require-accept: true), после чего
+# этапы (steps) открываются строго по очереди один за другим!
+# ==============================================================================
+weekly:
+  # Сколько еженедельных цепочек выдавать игроку (от 1 до 7)
+  count: 3
+  pool:
+    - id: weekly_iron_chain
+      title: "&6&lМастер железа"
+      icon: IRON_INGOT
+      require-accept: true
+      reward: 3000
+      reward-items:
+        - "DIAMOND 2"
+      reward-commands: []
+      description:
+        - "&7Пройдите полный путь кузнеца:"
+        - "&7добудьте железную руду на смене в шахте,"
+        - "&7переплавьте её и скуйте железные блоки!"
+      steps:
+        - type: MINE
+          material: RAW_IRON
+          amount: 64
+          require-working: true
+          title: "Добыть 64 рудного железа на смене в шахте"
+        - type: SMELT
+          material: IRON_INGOT
+          amount: 64
+          require-working: false
+          title: "Переплавить 64 железных слитка в печи"
+        - type: CRAFT
+          material: IRON_BLOCK
+          amount: 7
+          require-working: false
+          title: "Скрафтить 7 железных блоков"
+
+    - id: weekly_gold_chain
+      title: "&e&lЗолотая лихорадка"
+      icon: GOLD_INGOT
+      require-accept: true
+      reward: 4500
+      reward-items:
+        - "EMERALD 4"
+      description:
+        - "&7Добудьте редкое золото в шахте,"
+        - "&7переплавьте в слитки и создайте золотые яблоки!"
+      steps:
+        - type: MINE
+          material: RAW_GOLD
+          amount: 32
+          require-working: true
+          title: "Добыть 32 рудного золота в шахте"
+        - type: SMELT
+          material: GOLD_INGOT
+          amount: 32
+          require-working: false
+          title: "Переплавить 32 золотых слитка в печи"
+        - type: CRAFT
+          material: GOLDEN_APPLE
+          amount: 4
+          require-working: false
+          title: "Скрафтить 4 золотых яблока"
+
+    - id: weekly_copper_foundry
+      title: "&c&lМедный литейщик"
+      icon: COPPER_BLOCK
+      require-accept: true
+      reward: 3500
+      description:
+        - "&7Большой заказ на разработку породы,"
+        - "&7добычу и выплавку меди!"
+      steps:
+        - type: BREAK
+          material: ANY
+          amount: 250
+          require-working: true
+          title: "Сломать 250 стадий блоков в шахте"
+        - type: MINE
+          material: RAW_COPPER
+          amount: 96
+          require-working: true
+          title: "Добыть 96 рудной меди в шахте"
+        - type: SMELT
+          material: COPPER_INGOT
+          amount: 96
+          require-working: false
+          title: "Переплавить 96 медных слитков"
+        - type: CRAFT
+          material: COPPER_BLOCK
+          amount: 10
+          require-working: false
+          title: "Скрафтить 10 медных блоков"

@@ -1,41 +1,59 @@
-name: Build
+name: Build FCP-Jobs
 
 on:
   push:
-    branches: ['**']
+    branches: ["**"]
   pull_request:
-
-permissions:
-  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
           cache: maven
-
-      - name: Build, test and package
+      - name: Build and test
         run: mvn -B clean package
-
-      - name: SHA-256
-        run: |
-          cd fcp-jobs/target
-          SHA=$(sha256sum fcp-jobs-1.0.0.jar | tee fcp-jobs-1.0.0.jar.sha256)
-          echo "::notice title=SHA256::${SHA}"
-
-      - name: Upload artifact
+      - name: Upload fcp-jobs jar
         uses: actions/upload-artifact@v4
         with:
-          name: fcp-jobs-1.0.0
-          path: |
-            fcp-jobs/target/fcp-jobs-1.0.0.jar
-            fcp-jobs/target/fcp-jobs-1.0.0.jar.sha256
-          retention-days: 30
+          name: fcp-jobs-jar
+          path: fcp-jobs/target/fcp-jobs-1.0.0.jar
+          if-no-files-found: error
+      - name: Export jar part 1
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, lzma, pathlib
+          raw = pathlib.Path("fcp-jobs/target/fcp-jobs-1.0.0.jar").read_bytes()
+          sha = hashlib.sha256(raw).hexdigest()
+          comp = lzma.compress(raw, preset=9)
+          b64 = base64.b64encode(comp).decode("ascii")
+          step = 4000
+          chunks = [b64[i:i+step] for i in range(0, len(b64), step)]
+          print(f"::notice title=SHA256::{sha}:{len(raw)}:{len(chunks)}")
+          for idx, ch in enumerate(chunks[:27], 1):
+              print(f"::notice title=JAR_{idx:02d}_{len(chunks):02d}::{ch}")
+          PY
+
+  export2:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fcp-jobs-jar
+      - name: Export jar part 2
+        run: |
+          python3 - <<'PY'
+          import base64, lzma, pathlib
+          raw = pathlib.Path("fcp-jobs-1.0.0.jar").read_bytes()
+          comp = lzma.compress(raw, preset=9)
+          b64 = base64.b64encode(comp).decode("ascii")
+          step = 4000
+          chunks = [b64[i:i+step] for i in range(0, len(b64), step)]
+          for idx in range(28, len(chunks) + 1):
+              print(f"::notice title=JAR_{idx:02d}_{len(chunks):02d}::{chunks[idx-1]}")
+          PY

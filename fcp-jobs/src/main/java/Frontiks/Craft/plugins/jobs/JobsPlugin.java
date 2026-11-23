@@ -39,7 +39,7 @@ public final class JobsPlugin extends JavaPlugin {
     public void onEnable() {
         HrabotaConfig.init(this);
 
-        MiningSettings settings = new MiningSettings();
+        MiningSettings settings = new MiningSettings(this);
         this.questManager = new QuestManager(this, settings);
         this.questManager.init();
 
@@ -79,7 +79,7 @@ public final class JobsPlugin extends JavaPlugin {
         }
 
         bind("miningnode", new MiningNodeCommand(this, this.nodeManager));
-        bind("quests", new QuestsCommand(this, this.questManager, settings));
+        bind("quests", new QuestsCommand(this.questManager, settings));
 
         var pm = getServer().getPluginManager();
         pm.registerEvents(new QuitListener(), this);
@@ -87,7 +87,7 @@ public final class JobsPlugin extends JavaPlugin {
         pm.registerEvents(new WorkCheckListener(this), this);
         pm.registerEvents(new MiningListener(this, this.nodeManager), this);
         pm.registerEvents(new MiningNodeMenuListener(this, this.nodeManager), this);
-        pm.registerEvents(new QuestsMenuListener(this.questManager, settings), this);
+        pm.registerEvents(new QuestsMenuListener(this, this.questManager, settings), this);
         pm.registerEvents(new BlockBreakListener(this, this.nodeManager, this.questManager), this);
 
         // Предзагружаем ключевые классы при старте

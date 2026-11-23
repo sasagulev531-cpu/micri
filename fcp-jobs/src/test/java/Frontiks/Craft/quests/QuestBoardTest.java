@@ -160,4 +160,110 @@ class QuestBoardTest {
         assertEquals(2, r1.completedNow().size());
         assertEquals(5200, paid.get());
     }
+
+    @Test
+    void acceptGateAndMultiStepWeeklyChainWorkEndToEnd() {
+        QuestDef dailyMine = QuestDef.fromRaw(Map.of(
+                "id", "daily_iron_auto",
+                "type", "MINE",
+                "material", "RAW_IRON",
+                "amount", 64,
+                "reward", 250
+        ), "daily", false);
+        assertFalse(dailyMine.requireAccept, "Обычное задание шахты не требует взятия");
+
+        QuestDef weeklyChain = QuestDef.fromRaw(Map.of(
+                "id", "weekly_iron_chain",
+                "title", "&6Мастер железа",
+                "icon", "IRON_INGOT",
+                "require-accept", true,
+                "reward", 3000,
+                "reward-items", List.of("DIAMOND 2"),
+                "steps", List.of(
+                        Map.of("type", "MINE", "material", "RAW_IRON", "amount", 64, "require-working", true,
+                                "title", "Добыть 64 руды"),
+                        Map.of("type", "SMELT", "material", "IRON_INGOT", "amount", 64, "require-working", false,
+                                "title", "Переплавить 64 слитка"),
+                        Map.of("type", "CRAFT", "material", "IRON_BLOCK", "amount", 7, "require-working", false,
+                                "title", "Скрафтить 7 блоков")
+                )
+        ), "weekly", true);
+        assertTrue(weeklyChain.requireAccept);
+        assertEquals(3, weeklyChain.steps.size());
+
+        List<QuestAssignment> assigned = QuestBoard.assign(List.of(dailyMine, weeklyChain), 2, new Random(42L));
+        QuestAssignment dailyState = assigned.stream().filter(a -> a.id.equals("daily_iron_auto")).findFirst().orElseThrow();
+        QuestAssignment weeklyState = assigned.stream().filter(a -> a.id.equals("weekly_iron_chain")).findFirst().orElseThrow();
+
+        assertTrue(dailyState.accepted, "Задание шахты активно сразу");
+        assertFalse(weeklyState.accepted, "Еженедельная цепочка ждёт нажатия «Взять задание»");
+
+        Map<String, QuestDef> defs = Map.of(dailyMine.id, dailyMine, weeklyChain.id, weeklyChain);
+        AtomicInteger coins = new AtomicInteger();
+
+        // 1) Добываем 64 RAW_IRON в шахте БЕЗ взятия недельного квеста:
+        //    daily выполняется сразу, а weekly остаётся 0/64!
+        var rBeforeAccept = QuestBoard.applyEvent(
+                List.of(dailyState, weeklyState), defs,
+                QuestBoard.QuestEvent.mineCompletion(true, "STONE", Map.of("RAW_IRON", 64), 1, 10),
+                (id, c) -> { coins.addAndGet(c); return true; }
+        );
+        assertEquals(List.of("daily_iron_auto"), rBeforeAccept.completedNow());
+        assertEquals(250, coins.get());
+        assertEquals(0, weeklyState.stepIndex);
+        assertEquals(0, weeklyState.progress);
+
+        // 2) Игрок нажимает «Взять задание» в GUI
+        weeklyState.accepted = true;
+
+        // Попытка добыть ВНЕ смены (workingInMine=false) не засчитывает этап 1 (require-working=true)
+        QuestBoard.applyEvent(
+                List.of(weeklyState), defs,
+                QuestBoard.QuestEvent.mineCompletion(false, "STONE", Map.of("RAW_IRON", 64), 1, 0),
+                (id, c) -> true
+        );
+        assertEquals(0, weeklyState.progress);
+
+        // Попытка переплавить железо раньше времени (пока активен этап 1) не двигает этап 2
+        QuestBoard.applyEvent(
+                List.of(weeklyState), defs,
+                new QuestBoard.QuestEvent(false, Map.of(), Map.of(), Map.of("IRON_INGOT", 64), Map.of(), 0, 0),
+                (id, c) -> true
+        );
+        assertEquals(0, weeklyState.stepIndex);
+        assertEquals(0, weeklyState.progress);
+
+        // 3) Выполняем этап 1 (добыть 64 RAW_IRON на смене в шахте)
+        var rStep1 = QuestBoard.applyEvent(
+                List.of(weeklyState), defs,
+                QuestBoard.QuestEvent.mineCompletion(true, "STONE", Map.of("RAW_IRON", 64), 4, 40),
+                (id, c) -> { coins.addAndGet(c); return true; }
+        );
+        assertTrue(rStep1.completedNow().isEmpty());
+        assertEquals(1, rStep1.stepAdvances().size());
+        assertEquals(1, weeklyState.stepIndex);
+        assertEquals(0, weeklyState.progress);
+
+        // 4) Выполняем этап 2 (переплавить 64 IRON_INGOT в печи — можно вне шахты)
+        var rStep2 = QuestBoard.applyEvent(
+                List.of(weeklyState), defs,
+                new QuestBoard.QuestEvent(false, Map.of(), Map.of(), Map.of("IRON_INGOT", 64), Map.of(), 0, 0),
+                (id, c) -> { coins.addAndGet(c); return true; }
+        );
+        assertTrue(rStep2.completedNow().isEmpty());
+        assertEquals(1, rStep2.stepAdvances().size());
+        assertEquals(2, weeklyState.stepIndex);
+        assertEquals(0, weeklyState.progress);
+
+        // 5) Выполняем финальный этап 3 (скрафтить 7 IRON_BLOCK) -> вся цепочка завершена!
+        var rStep3 = QuestBoard.applyEvent(
+                List.of(weeklyState), defs,
+                new QuestBoard.QuestEvent(false, Map.of(), Map.of(), Map.of(), Map.of("IRON_BLOCK", 7), 0, 0),
+                (id, c) -> { coins.addAndGet(c); return true; }
+        );
+        assertEquals(List.of("weekly_iron_chain"), rStep3.completedNow());
+        assertTrue(weeklyState.completed);
+        assertTrue(weeklyState.paid);
+        assertEquals(3250, coins.get());
+    }
 }

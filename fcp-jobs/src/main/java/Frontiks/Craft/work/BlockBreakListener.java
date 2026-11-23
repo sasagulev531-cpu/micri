@@ -73,7 +73,7 @@ public class BlockBreakListener implements Listener {
         int money = getOrePrice(ore);
         WorkManager.add(p, money);
         if (questManager != null) {
-            questManager.applyBlockBreak(p, ore.name(), 1);
+            questManager.applyBlockBreakAndCoins(p, ore.name(), money);
         }
 
         b.setType(Material.COBBLESTONE);

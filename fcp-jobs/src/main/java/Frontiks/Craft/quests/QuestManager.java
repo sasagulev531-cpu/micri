@@ -5,10 +5,15 @@ import Frontiks.Craft.api.FcpServices;
 import Frontiks.Craft.api.FcpYamlStorage;
 import Frontiks.Craft.api.LegacyFiles;
 import Frontiks.Craft.mining.MiningSettings;
+import Frontiks.Craft.work.HrabotaConfig;
+import Frontiks.Craft.work.WorkManager;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -16,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -23,12 +29,10 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Хранение и начисление заданий шахтёра (mining-quests.yml).
- * Прогресс привязан к игроку (UUID), переживает relog/restart, награда — ровно один раз.
+ * Управление активными заданиями и цепочками этапов игрока (mining-quests.yml).
  */
 public final class QuestManager {
 
-    /** Отображаемое состояние задания для GUI/сообщений. */
     public record ResolvedQuest(QuestBoard.Period period, QuestDef def, QuestAssignment state) {}
 
     private static final class Bucket {
@@ -41,7 +45,6 @@ public final class QuestManager {
     private final ReentrantLock lock = new ReentrantLock();
     private File file;
     private FileConfiguration config;
-    /** uuid -> period(DAILY/WEEKLY) -> bucket */
     private final Map<UUID, Map<QuestBoard.Period, Bucket>> data = new HashMap<>();
 
     public QuestManager(JavaPlugin plugin, MiningSettings settings) {
@@ -55,11 +58,11 @@ public final class QuestManager {
             file = LegacyFiles.migrate(plugin, "mining-quests.yml");
             if (!file.exists()) {
                 config = new YamlConfiguration();
-                config.set("version", 1);
+                config.set("version", 2);
                 FcpYamlStorage.save(plugin, file, config);
             } else {
                 config = FcpYamlStorage.load(plugin, file);
-                if (!config.contains("version")) config.set("version", 1);
+                if (!config.contains("version")) config.set("version", 2);
             }
             loadAll();
         } catch (Exception e) {
@@ -78,7 +81,6 @@ public final class QuestManager {
             try {
                 uuid = UUID.fromString(uuidRaw);
             } catch (IllegalArgumentException e) {
-                plugin.getLogger().warning("mining-quests.yml: пропущен некорректный UUID " + uuidRaw);
                 continue;
             }
             Map<QuestBoard.Period, Bucket> perPeriod = new HashMap<>();
@@ -130,7 +132,6 @@ public final class QuestManager {
         config.set(path + ".quests", list);
     }
 
-    /** Возвращает отображение заданий игрока на текущий период (назначает новые при смене периода или нехватке). */
     public List<ResolvedQuest> resolvedQuests(Player player) {
         lock.lock();
         try {
@@ -141,39 +142,100 @@ public final class QuestManager {
         }
     }
 
-    /** Начисляет прогресс за ломку блока/стадии в шахте (для типа СЛОМАТЬ / BREAK_BLOCK). */
+    /**
+     * Игрок берёт задание в GUI (ЛКМ по карточке задания).
+     * До взятия прогресс по заданиям с require-accept=true не идёт!
+     */
+    public boolean acceptQuest(Player player, String questId) {
+        if (questId == null || questId.isBlank()) return false;
+        UUID uuid = player.getUniqueId();
+        lock.lock();
+        try {
+            ensureAssignments(uuid, System.currentTimeMillis());
+            Map<QuestBoard.Period, Bucket> perPeriod = data.getOrDefault(uuid, Map.of());
+            for (QuestBoard.Period period : QuestBoard.Period.values()) {
+                Bucket bucket = perPeriod.get(period);
+                if (bucket == null) continue;
+                Map<String, QuestDef> defs = period == QuestBoard.Period.DAILY ? settings.dailyDefs() : settings.weeklyDefs();
+                for (QuestAssignment a : bucket.quests) {
+                    if (a.id.equals(questId)) {
+                        QuestDef def = defs.get(a.id);
+                        if (def == null || a.completed || !def.requireAccept || a.accepted) {
+                            return false;
+                        }
+                        a.accepted = true;
+                        saveAll();
+                        player.playSound(player.getLocation(), "minecraft:entity.experience_orb.pickup", 1.0f, 1.15f);
+                        player.sendMessage(Frontiks.Craft.utils.color.color(
+                                Frontiks.Craft.utils.Msg.PREFIX + "&aВы взяли задание: &f" + def.title));
+                        QuestStep first = def.steps.get(Math.min(a.stepIndex, def.steps.size() - 1));
+                        player.sendMessage(Frontiks.Craft.utils.color.color(
+                                "&8 » &eТекущий этап (1/" + def.steps.size() + "): &f" + first.title));
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // ------------------------------------------------------------------ события прогресса
+
     public void applyBlockBreak(Player player, String blockMaterial, int brokenCount) {
         if (!settings.questsEnabled() || blockMaterial == null || brokenCount <= 0) return;
-        applyEvent(player, Map.of(blockMaterial.toUpperCase(), brokenCount), Map.of(), Map.of(), 0);
+        boolean working = WorkManager.isWorking(player) && HrabotaConfig.contains(player.getLocation());
+        dispatchEvent(player, new QuestBoard.QuestEvent(
+                working,
+                Map.of(blockMaterial.toUpperCase(Locale.ROOT), brokenCount),
+                Map.of(), Map.of(), Map.of(), 0, 0
+        ));
     }
 
-    /** Начисляет прогресс за получение предмета (например, из печи для типа ПОЛУЧИТЬ / OBTAIN_ITEM). */
-    public void applyItemObtained(Player player, String itemMaterial, int count) {
-        if (!settings.questsEnabled() || itemMaterial == null || count <= 0) return;
-        applyEvent(player, Map.of(), Map.of(), Map.of(itemMaterial.toUpperCase(), count), 0);
-    }
-
-    /** Совместимый вызов завершения узла. */
-    public void applyNodeCompletion(Player player, Map<String, Integer> lootCounts, int nodesCompleted) {
-        applyNodeCompletion(player, null, lootCounts, nodesCompleted);
-    }
-
-    /** Полное завершение узла: засчитывает сломанный блок последней стадии, добытый лут, полученные предметы и сам узел. */
-    public void applyNodeCompletion(Player player, String brokenStageMaterial,
-                                    Map<String, Integer> lootCounts, int nodesCompleted) {
+    public void applyBlockBreakAndCoins(Player player, String blockMaterial, int coinsEarned) {
         if (!settings.questsEnabled()) return;
-        Map<String, Integer> broken = (brokenStageMaterial == null || brokenStageMaterial.isBlank())
+        boolean working = WorkManager.isWorking(player) && HrabotaConfig.contains(player.getLocation());
+        Map<String, Integer> broken = (blockMaterial == null || blockMaterial.isBlank())
                 ? Map.of()
-                : Map.of(brokenStageMaterial.toUpperCase(), 1);
-        Map<String, Integer> safeLoot = lootCounts == null ? Map.of() : lootCounts;
-        applyEvent(player, broken, safeLoot, safeLoot, nodesCompleted);
+                : Map.of(blockMaterial.toUpperCase(Locale.ROOT), 1);
+        dispatchEvent(player, new QuestBoard.QuestEvent(
+                working, broken, Map.of(), Map.of(), Map.of(), 0, Math.max(0, coinsEarned)
+        ));
     }
 
-    private void applyEvent(Player player,
-                            Map<String, Integer> brokenBlocks,
-                            Map<String, Integer> lootCounts,
-                            Map<String, Integer> obtainedItems,
-                            int nodesCompleted) {
+    public void applyNodeCompletion(Player player, String brokenStageMaterial,
+                                    Map<String, Integer> lootCounts, int nodesCompleted, int coinsEarned) {
+        if (!settings.questsEnabled()) return;
+        boolean working = WorkManager.isWorking(player) && HrabotaConfig.contains(player.getLocation());
+        dispatchEvent(player, QuestBoard.QuestEvent.mineCompletion(
+                working, brokenStageMaterial, lootCounts, nodesCompleted, Math.max(0, coinsEarned)
+        ));
+    }
+
+    public void applyItemSmelted(Player player, String itemMaterial, int count) {
+        if (!settings.questsEnabled() || itemMaterial == null || count <= 0) return;
+        boolean working = WorkManager.isWorking(player) && HrabotaConfig.contains(player.getLocation());
+        dispatchEvent(player, new QuestBoard.QuestEvent(
+                working,
+                Map.of(), Map.of(),
+                Map.of(itemMaterial.toUpperCase(Locale.ROOT), count),
+                Map.of(), 0, 0
+        ));
+    }
+
+    public void applyItemCrafted(Player player, String itemMaterial, int count) {
+        if (!settings.questsEnabled() || itemMaterial == null || count <= 0) return;
+        boolean working = WorkManager.isWorking(player) && HrabotaConfig.contains(player.getLocation());
+        dispatchEvent(player, new QuestBoard.QuestEvent(
+                working,
+                Map.of(), Map.of(), Map.of(),
+                Map.of(itemMaterial.toUpperCase(Locale.ROOT), count),
+                0, 0
+        ));
+    }
+
+    private void dispatchEvent(Player player, QuestBoard.QuestEvent event) {
         UUID uuid = player.getUniqueId();
         long now = System.currentTimeMillis();
         lock.lock();
@@ -185,14 +247,15 @@ public final class QuestManager {
             for (QuestBoard.Period period : QuestBoard.Period.values()) {
                 Bucket bucket = perPeriod.computeIfAbsent(period, k -> new Bucket());
                 Map<String, QuestDef> defs = period == QuestBoard.Period.DAILY ? settings.dailyDefs() : settings.weeklyDefs();
-                QuestBoard.ApplyResult result = QuestBoard.applyProgress(
-                        bucket.quests, defs, brokenBlocks, lootCounts, obtainedItems, nodesCompleted,
-                        (questId, reward) -> payout(uuid, questId, reward));
+                QuestBoard.ApplyResult result = QuestBoard.applyEvent(
+                        bucket.quests, defs, event,
+                        (questId, reward) -> payoutFull(player, defs.get(questId)));
                 if (!result.completedNow().isEmpty() || !result.paidNow().isEmpty()
-                        || !result.payFailed().isEmpty() || !result.inProgress().isEmpty()) {
+                        || !result.payFailed().isEmpty() || !result.inProgress().isEmpty()
+                        || !result.stepAdvances().isEmpty()) {
                     anyChanged = true;
                 }
-                report(player, period, result, defs);
+                report(player, result, defs);
             }
             if (anyChanged) {
                 saveAll();
@@ -202,7 +265,6 @@ public final class QuestManager {
         }
     }
 
-    /** Синхронизирует активные назначения всех игроков с обновлённым пулом (удаляет удалённые и добирает недостающие). */
     public void syncPoolsAndTopUp() {
         lock.lock();
         try {
@@ -216,18 +278,6 @@ public final class QuestManager {
         }
     }
 
-    /** Принудительно перевыдаёт задачи всем игрокам заново из текущего пула (/quests reroll). */
-    public void forceRerollAll() {
-        lock.lock();
-        try {
-            data.clear();
-            saveAll();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /** Повторная попытка выплаты наград за уже выполненные, но неоплаченные задания (/quests claim). */
     public QuestBoard.ApplyResult retryPendingPayouts(Player player) {
         UUID uuid = player.getUniqueId();
         long now = System.currentTimeMillis();
@@ -242,55 +292,91 @@ public final class QuestManager {
                 if (bucket == null) continue;
                 Map<String, QuestDef> defs = period == QuestBoard.Period.DAILY ? settings.dailyDefs() : settings.weeklyDefs();
                 QuestBoard.ApplyResult r = QuestBoard.retryPendingPayouts(bucket.quests, defs,
-                        (questId, reward) -> payout(uuid, questId, reward));
+                        (questId, reward) -> payoutFull(player, defs.get(questId)));
                 paid.addAll(r.paidNow());
                 failed.addAll(r.payFailed());
             }
             saveAll();
-            return new QuestBoard.ApplyResult(List.of(), paid, failed, List.of());
+            return new QuestBoard.ApplyResult(List.of(), paid, failed, List.of(), List.of());
         } finally {
             lock.unlock();
         }
     }
 
-    private void report(Player player, QuestBoard.Period period, QuestBoard.ApplyResult result,
-                        Map<String, QuestDef> defs) {
+    private void report(Player player, QuestBoard.ApplyResult result, Map<String, QuestDef> defs) {
+        for (QuestBoard.StepAdvance adv : result.stepAdvances()) {
+            QuestDef def = defs.get(adv.questId());
+            String qTitle = def == null ? adv.questId() : def.title;
+            player.playSound(player.getLocation(), "minecraft:entity.player.levelup", 0.8f, 1.35f);
+            player.sendMessage(Frontiks.Craft.utils.color.color(
+                    Frontiks.Craft.utils.Msg.PREFIX + "&aЭтап " + adv.completedStepNumber() + "/" + adv.totalSteps()
+                            + " задания «&f" + qTitle + "&a» выполнен!"));
+            player.sendMessage(Frontiks.Craft.utils.color.color(
+                    "&8 » &eСледующий этап: &f" + adv.nextStepTitle()));
+        }
         for (String id : result.completedNow()) {
             QuestDef def = defs.get(id);
             String title = def == null ? id : def.title;
+            player.playSound(player.getLocation(), "minecraft:entity.player.levelup", 1.0f, 1.0f);
             player.sendMessage(Frontiks.Craft.utils.color.color(
-                    Frontiks.Craft.utils.Msg.PREFIX + "&aЗадание выполнено: &f" + title));
+                    Frontiks.Craft.utils.Msg.PREFIX + "&a&lЗадание выполнено: &f" + title));
         }
         for (String id : result.paidNow()) {
             QuestDef def = defs.get(id);
-            if (def == null) continue;
+            if (def == null || def.reward <= 0) continue;
             player.sendMessage(Frontiks.Craft.utils.color.color(
-                    Frontiks.Craft.utils.Msg.PREFIX + "&f+" + def.reward + " монет &7за задание &f" + def.title));
+                    Frontiks.Craft.utils.Msg.PREFIX + "&6+" + def.reward + " монет &7за задание &f" + def.title));
         }
         for (String id : result.payFailed()) {
             QuestDef def = defs.get(id);
             String title = def == null ? id : def.title;
             player.sendMessage(Frontiks.Craft.utils.color.color(
-                    Frontiks.Craft.utils.Msg.PREFIX + "&cНе удалось начислить награду за «" + title
-                            + "». Попробуйте /quests claim позже."));
+                    Frontiks.Craft.utils.Msg.PREFIX + "&cНе удалось выдать монеты за «" + title
+                            + "». Нажмите «Проверить награды» в меню задач позже."));
         }
     }
 
-    /** true = деньги начислены. Любая ошибка логируется, игроку об успехе не сообщаем. */
-    private boolean payout(UUID uuid, String questId, int reward) {
-        if (reward <= 0) return true;
-        try {
-            EconomyService economy = FcpServices.require(EconomyService.class);
-            economy.addCoins(uuid, reward);
-            return true;
-        } catch (Throwable t) {
-            plugin.getLogger().severe("Ошибка начисления награды за задание " + questId
-                    + " игроку " + uuid + ": " + t);
-            return false;
+    /** Выдаёт полную награду задания: монеты + предметы + консольные команды. */
+    private boolean payoutFull(Player player, QuestDef def) {
+        if (def == null) return false;
+        if (def.reward > 0) {
+            try {
+                EconomyService economy = FcpServices.require(EconomyService.class);
+                economy.addCoins(player.getUniqueId(), def.reward);
+            } catch (Throwable t) {
+                plugin.getLogger().severe("Ошибка начисления " + def.reward + " монет за задание "
+                        + def.id + " игроку " + player.getName() + ": " + t);
+                return false;
+            }
         }
+        // Предметы в награду ("DIAMOND 2")
+        for (String spec : def.rewardItems) {
+            if (spec == null || spec.isBlank()) continue;
+            String[] parts = spec.trim().split("\\s+");
+            Material mat = Material.matchMaterial(parts[0].toUpperCase(Locale.ROOT));
+            int amt = parts.length >= 2 ? QuestDef.num(parts[1], 1) : 1;
+            if (mat != null && mat.isItem() && amt > 0) {
+                int left = amt;
+                while (left > 0) {
+                    int stackSize = Math.min(mat.getMaxStackSize(), left);
+                    left -= stackSize;
+                    for (ItemStack overflow : player.getInventory().addItem(new ItemStack(mat, stackSize)).values()) {
+                        player.getWorld().dropItemNaturally(player.getLocation(), overflow);
+                    }
+                }
+            }
+        }
+        // Консольные команды
+        for (String cmd : def.rewardCommands) {
+            if (cmd == null || cmd.isBlank()) continue;
+            String parsed = cmd.replace("%player%", player.getName())
+                    .replace("%uuid%", player.getUniqueId().toString());
+            if (parsed.startsWith("/")) parsed = parsed.substring(1);
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsed);
+        }
+        return true;
     }
 
-    /** Гарантирует, что у игрока есть назначения на текущие суточный/недельный периоды и добирает новые при добавлении в пул. */
     private void ensureAssignments(UUID uuid, long nowMs) {
         var zone = settings.zoneId();
         Map<QuestBoard.Period, Bucket> perPeriod = data.computeIfAbsent(uuid, k -> new HashMap<>());
@@ -314,9 +400,13 @@ public final class QuestManager {
                     : new ArrayList<>(QuestBoard.assign(pool, targetCount, rng));
             return;
         }
-        // Убираем удалённые из конфига задания
         bucket.quests.removeIf(a -> !defs.containsKey(a.id));
-        // Добираем недостающие слоты, если админ добавил новые задачи в пул или увеличил лимит
+        for (QuestAssignment a : bucket.quests) {
+            QuestDef d = defs.get(a.id);
+            if (d != null && !d.requireAccept) {
+                a.accepted = true;
+            }
+        }
         int want = Math.min(targetCount, pool.size());
         if (bucket.quests.size() < want) {
             Set<String> existing = new HashSet<>();
@@ -344,24 +434,6 @@ public final class QuestManager {
         return out;
     }
 
-    /** Есть ли у игрока невыплаченные выполненные задания (для кнопки /quests claim). */
-    public boolean hasPendingPayouts(Player player) {
-        lock.lock();
-        try {
-            ensureAssignments(player.getUniqueId(), System.currentTimeMillis());
-            Map<QuestBoard.Period, Bucket> perPeriod = data.getOrDefault(player.getUniqueId(), Map.of());
-            for (Bucket bucket : perPeriod.values()) {
-                for (QuestAssignment a : bucket.quests) {
-                    if (a.completed && !a.paid) return true;
-                }
-            }
-            return false;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /** Текст дедлайна для GUI. */
     public String resetText(QuestBoard.Period period) {
         var zone = settings.zoneId();
         long now = System.currentTimeMillis();

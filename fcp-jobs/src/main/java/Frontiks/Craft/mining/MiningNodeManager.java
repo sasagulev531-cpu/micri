@@ -81,6 +81,7 @@ public final class MiningNodeManager {
     public void reload() {
         HrabotaConfig.reload();
         settings.reload();
+        quests.syncPoolsAndTopUp();
         reloadNodes();
         restartTasks();
     }
@@ -516,7 +517,7 @@ public final class MiningNodeManager {
                         plugin.getLogger().severe("Не удалось начислить деньги смены за узел " + node.id + ": " + t);
                     }
                 }
-                quests.applyNodeCompletion(p, current.name(), drops, 1);
+                quests.applyNodeCompletion(p, current.name(), drops, 1, reward);
             }
         }
 

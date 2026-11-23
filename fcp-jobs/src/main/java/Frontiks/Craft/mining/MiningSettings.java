@@ -1,10 +1,13 @@
 package Frontiks.Craft.mining;
 
 import Frontiks.Craft.quests.QuestDef;
+import Frontiks.Craft.quests.QuestStep;
 import Frontiks.Craft.work.HrabotaConfig;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -12,15 +15,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Чтение и валидация mining/quests-секций из hrabota.yml.
- * Все настройки имеют документированные дефолты; ошибки копятся в {@link #configErrors()}
- * и выводятся командой /miningnode validate.
+ * Чтение и валидация:
+ * - настроек узлов шахты из hrabota.yml;
+ * - кастомных заданий и цепочек из отдельного файла plugins/FCP-Jobs/quests.yml.
  */
 public final class MiningSettings {
 
+    private final JavaPlugin plugin;
+
     // mining
-    private int cooldownSeconds = 45;          // дефолт совпадает со старой механикой (45с)
-    private int nodeRewardCoins = 10;          // пример баланса, настраивается
+    private int cooldownSeconds = 45;
+    private int nodeRewardCoins = 10;
     private List<String> defaultStages = List.of("TUFF", "STONE", "ANDESITE");
     private String defaultDepleted = "COBBLESTONE";
     private List<LootEntry> defaultLoot = builtinDefaultLoot();
@@ -33,72 +38,119 @@ public final class MiningSettings {
     private int markerRefreshTicks = 40;
     private int pointsPerEdge = 4;
 
-    // quests
+    // quests (plugins/FCP-Jobs/quests.yml)
     private boolean questsEnabled = true;
-    private String timezone = "Europe/Moscow"; // безопасный документированный дефолт, не зависит от TZ процесса
-    private int dailyCount = 2;
-    private int weeklyCount = 2;
+    private String timezone = "Europe/Moscow";
+    private int dailyCount = 3;
+    private int weeklyCount = 3;
     private List<QuestDef> dailyPool = builtinDailyPool();
     private List<QuestDef> weeklyPool = builtinWeeklyPool();
 
     private final List<String> configErrors = new ArrayList<>();
 
     public MiningSettings() {
+        this(null);
+    }
+
+    public MiningSettings(JavaPlugin plugin) {
+        this.plugin = plugin;
         reload();
     }
 
     public void reload() {
         configErrors.clear();
         FileConfiguration cfg = HrabotaConfig.get();
-        if (cfg == null) {
-            configErrors.add("hrabota.yml не загружен");
+        if (cfg != null) {
+            cooldownSeconds = Math.max(0, cfg.getInt("mining.cooldown-seconds", 45));
+            nodeRewardCoins = Math.max(0, cfg.getInt("mining.node-reward-coins", 10));
+
+            List<String> stages = upperList(cfg.getStringList("mining.stages"));
+            if (stages.isEmpty()) stages = upperList(cfg.getStringList("mining.node.stages"));
+            defaultStages = stages.isEmpty() ? List.of("TUFF", "STONE", "ANDESITE") : stages;
+
+            defaultDepleted = cfg.getString("mining.depleted-material",
+                    cfg.getString("mining.node.depleted-material", "COBBLESTONE")).trim().toUpperCase();
+            if (defaultDepleted.isEmpty()) defaultDepleted = "COBBLESTONE";
+
+            defaultLoot = parseLoot(cfg.getMapList("mining.loot"), "mining.loot");
+            if (defaultLoot.isEmpty()) defaultLoot = parseLoot(cfg.getMapList("mining.node.loot"), "mining.node.loot");
+            if (defaultLoot.isEmpty()) defaultLoot = builtinDefaultLoot();
+
+            List<String> palette = upperList(cfg.getStringList("mining.editable-materials"));
+            if (!palette.isEmpty()) editableMaterials = palette;
+
+            markersEnabled = cfg.getBoolean("mining.markers.enabled", true);
+            showDepleted = cfg.getBoolean("mining.markers.show-depleted", false);
+            markerRadius = Math.max(4, Math.min(128, cfg.getInt("mining.markers.radius", 24)));
+            markerRefreshTicks = Math.max(10, Math.min(600, cfg.getInt("mining.markers.refresh-ticks", 40)));
+            pointsPerEdge = Math.max(1, Math.min(16, cfg.getInt("mining.markers.points-per-edge", 4)));
+        }
+
+        reloadQuestsConfig();
+    }
+
+    /** Загружает plugins/FCP-Jobs/quests.yml (создаёт дефолтный файл при первом запуске). */
+    private void reloadQuestsConfig() {
+        FileConfiguration qcfg = null;
+        if (plugin != null) {
+            try {
+                if (!plugin.getDataFolder().exists()) {
+                    plugin.getDataFolder().mkdirs();
+                }
+                File qFile = new File(plugin.getDataFolder(), "quests.yml");
+                if (!qFile.exists()) {
+                    plugin.saveResource("quests.yml", false);
+                }
+                qcfg = YamlConfiguration.loadConfiguration(qFile);
+            } catch (Exception e) {
+                configErrors.add("Не удалось прочитать plugins/FCP-Jobs/quests.yml: " + e.getMessage());
+            }
+        }
+
+        if (qcfg == null) {
+            FileConfiguration hcfg = HrabotaConfig.get();
+            if (hcfg != null && hcfg.isConfigurationSection("quests")) {
+                questsEnabled = hcfg.getBoolean("quests.enabled", true);
+                loadTimezone(hcfg.getString("quests.timezone", "Europe/Moscow"));
+                dailyCount = Math.max(1, Math.min(7, hcfg.getInt("quests.daily.count", 3)));
+                weeklyCount = Math.max(1, Math.min(7, hcfg.getInt("quests.weekly.count", 3)));
+                dailyPool = hcfg.contains("quests.daily.pool")
+                        ? parseQuestPool(hcfg.getMapList("quests.daily.pool"), "quests.daily.pool", false)
+                        : builtinDailyPool();
+                weeklyPool = hcfg.contains("quests.weekly.pool")
+                        ? parseQuestPool(hcfg.getMapList("quests.weekly.pool"), "quests.weekly.pool", true)
+                        : builtinWeeklyPool();
+                return;
+            }
+            dailyPool = builtinDailyPool();
+            weeklyPool = builtinWeeklyPool();
             return;
         }
 
-        cooldownSeconds = Math.max(0, cfg.getInt("mining.cooldown-seconds", 45));
-        nodeRewardCoins = Math.max(0, cfg.getInt("mining.node-reward-coins", 10));
+        questsEnabled = qcfg.getBoolean("enabled", true);
+        loadTimezone(qcfg.getString("timezone", "Europe/Moscow"));
+        dailyCount = Math.max(1, Math.min(7, qcfg.getInt("daily.count", 3)));
+        weeklyCount = Math.max(1, Math.min(7, qcfg.getInt("weekly.count", 3)));
 
-        List<String> stages = upperList(cfg.getStringList("mining.stages"));
-        if (stages.isEmpty()) stages = upperList(cfg.getStringList("mining.node.stages"));
-        defaultStages = stages.isEmpty() ? List.of("TUFF", "STONE", "ANDESITE") : stages;
+        if (qcfg.contains("daily.pool")) {
+            dailyPool = parseQuestPool(qcfg.getMapList("daily.pool"), "quests.yml daily.pool", false);
+        } else {
+            dailyPool = builtinDailyPool();
+        }
+        if (qcfg.contains("weekly.pool")) {
+            weeklyPool = parseQuestPool(qcfg.getMapList("weekly.pool"), "quests.yml weekly.pool", true);
+        } else {
+            weeklyPool = builtinWeeklyPool();
+        }
+    }
 
-        defaultDepleted = cfg.getString("mining.depleted-material",
-                cfg.getString("mining.node.depleted-material", "COBBLESTONE")).trim().toUpperCase();
-        if (defaultDepleted.isEmpty()) defaultDepleted = "COBBLESTONE";
-
-        defaultLoot = parseLoot(cfg.getMapList("mining.loot"), "mining.loot");
-        if (defaultLoot.isEmpty()) defaultLoot = parseLoot(cfg.getMapList("mining.node.loot"), "mining.node.loot");
-        if (defaultLoot.isEmpty()) defaultLoot = builtinDefaultLoot();
-
-        List<String> palette = upperList(cfg.getStringList("mining.editable-materials"));
-        if (!palette.isEmpty()) editableMaterials = palette;
-
-        markersEnabled = cfg.getBoolean("mining.markers.enabled", true);
-        showDepleted = cfg.getBoolean("mining.markers.show-depleted", false);
-        markerRadius = Math.max(4, Math.min(128, cfg.getInt("mining.markers.radius", 24)));
-        markerRefreshTicks = Math.max(10, Math.min(600, cfg.getInt("mining.markers.refresh-ticks", 40)));
-        pointsPerEdge = Math.max(1, Math.min(16, cfg.getInt("mining.markers.points-per-edge", 4)));
-
-        questsEnabled = cfg.getBoolean("quests.enabled", true);
-        String tz = cfg.getString("quests.timezone", "Europe/Moscow");
+    private void loadTimezone(String tz) {
         try {
             ZoneId.of(tz);
             timezone = tz.trim();
         } catch (Exception e) {
-            configErrors.add("quests.timezone='" + tz + "' невалиден — используется Europe/Moscow");
+            configErrors.add("quests timezone='" + tz + "' невалиден — используется Europe/Moscow");
             timezone = "Europe/Moscow";
-        }
-        dailyCount = Math.max(1, Math.min(7, cfg.getInt("quests.daily.count", 2)));
-        weeklyCount = Math.max(1, Math.min(7, cfg.getInt("quests.weekly.count", 2)));
-        if (cfg.contains("quests.daily.pool")) {
-            dailyPool = parseQuestPool(cfg.getMapList("quests.daily.pool"), "quests.daily.pool");
-        } else {
-            dailyPool = builtinDailyPool();
-        }
-        if (cfg.contains("quests.weekly.pool")) {
-            weeklyPool = parseQuestPool(cfg.getMapList("quests.weekly.pool"), "quests.weekly.pool");
-        } else {
-            weeklyPool = builtinWeeklyPool();
         }
     }
 
@@ -116,7 +168,7 @@ public final class MiningSettings {
     public int nodeRewardCoins() { return nodeRewardCoins; }
     public List<String> defaultStages() { return defaultStages; }
     public String defaultDepleted() { return defaultDepleted; }
-    /** Копия лута по умолчанию (узлы получают собственную редактируемую копию). */
+
     public List<LootEntry> defaultLoot() {
         List<LootEntry> copy = new ArrayList<>(defaultLoot.size());
         for (LootEntry e : defaultLoot) copy.add(new LootEntry(e.material, e.min, e.max, e.chance));
@@ -147,6 +199,7 @@ public final class MiningSettings {
         cfg.set("mining.depleted-material", this.defaultDepleted);
         HrabotaConfig.save();
     }
+
     public List<String> editableMaterials() { return editableMaterials; }
 
     public boolean markersEnabled() { return markersEnabled; }
@@ -162,35 +215,6 @@ public final class MiningSettings {
     public List<QuestDef> dailyPool() { return dailyPool; }
     public List<QuestDef> weeklyPool() { return weeklyPool; }
 
-    public void saveQuestPool(Frontiks.Craft.quests.QuestBoard.Period period, List<QuestDef> pool) {
-        List<QuestDef> copy = new ArrayList<>(pool);
-        FileConfiguration cfg = HrabotaConfig.get();
-        List<Map<String, Object>> serialized = new ArrayList<>();
-        for (QuestDef d : copy) serialized.add(d.toMap());
-        if (period == Frontiks.Craft.quests.QuestBoard.Period.DAILY) {
-            this.dailyPool = copy;
-            cfg.set("quests.daily.pool", serialized);
-        } else {
-            this.weeklyPool = copy;
-            cfg.set("quests.weekly.pool", serialized);
-        }
-        HrabotaConfig.save();
-    }
-
-    public void saveQuestCount(Frontiks.Craft.quests.QuestBoard.Period period, int count) {
-        int clamped = Math.max(1, Math.min(7, count));
-        FileConfiguration cfg = HrabotaConfig.get();
-        if (period == Frontiks.Craft.quests.QuestBoard.Period.DAILY) {
-            this.dailyCount = clamped;
-            cfg.set("quests.daily.count", clamped);
-        } else {
-            this.weeklyCount = clamped;
-            cfg.set("quests.weekly.count", clamped);
-        }
-        HrabotaConfig.save();
-    }
-
-    /** id -> QuestDef для быстрого поиска во время начисления. */
     public Map<String, QuestDef> dailyDefs() { return toMap(dailyPool); }
     public Map<String, QuestDef> weeklyDefs() { return toMap(weeklyPool); }
 
@@ -214,11 +238,11 @@ public final class MiningSettings {
         return out;
     }
 
-    private List<QuestDef> parseQuestPool(List<Map<?, ?>> rawList, String where) {
+    private List<QuestDef> parseQuestPool(List<Map<?, ?>> rawList, String where, boolean weeklyDefaultAccept) {
         List<QuestDef> out = new ArrayList<>();
         for (int i = 0; i < rawList.size(); i++) {
             try {
-                out.add(QuestDef.fromRaw(rawList.get(i), where + " #" + (i + 1)));
+                out.add(QuestDef.fromRaw(rawList.get(i), where + " #" + (i + 1), weeklyDefaultAccept));
             } catch (IllegalArgumentException ex) {
                 configErrors.add(ex.getMessage());
             }
@@ -246,23 +270,35 @@ public final class MiningSettings {
 
     private static List<QuestDef> builtinDailyPool() {
         return List.of(
-                new QuestDef("daily_cobble_32", QuestDef.Type.LOOT_AMOUNT, "COBBLESTONE", 32,
-                        "Добыть 32 булыжника", "Соберите булыжник с добываемых узлов шахты", 150),
-                new QuestDef("daily_coal_8", QuestDef.Type.LOOT_AMOUNT, "COAL", 8,
-                        "Найти 8 угля", "Добудьте уголь при разработке узлов", 200),
-                new QuestDef("daily_nodes_10", QuestDef.Type.NODES_COMPLETED, null, 10,
-                        "Разработать 10 узлов", "Полностью пройдите все стадии 10 узлов", 180)
+                new QuestDef("daily_cobble_64", QuestDef.Type.LOOT_AMOUNT, "COBBLESTONE", 64,
+                        "&fГорная порода", "Добудьте булыжник на смене в шахте", 200),
+                new QuestDef("daily_coal_24", QuestDef.Type.LOOT_AMOUNT, "COAL", 24,
+                        "&fТопливо для печей", "Добудьте уголь из узлов шахты", 300),
+                new QuestDef("daily_nodes_15", QuestDef.Type.NODES_COMPLETED, null, 15,
+                        "&fУдарник смены", "Полностью разработайте узлы шахты", 400)
         );
     }
 
     private static List<QuestDef> builtinWeeklyPool() {
         return List.of(
-                new QuestDef("weekly_cobble_256", QuestDef.Type.LOOT_AMOUNT, "COBBLESTONE", 256,
-                        "Добыть 256 булыжника за неделю", "Крупная поставка булыжника с узлов шахты", 1000),
-                new QuestDef("weekly_coal_48", QuestDef.Type.LOOT_AMOUNT, "COAL", 48,
-                        "Найти 48 угля за неделю", "Соберите уголь при полном разрушении узлов", 1200),
-                new QuestDef("weekly_nodes_75", QuestDef.Type.NODES_COMPLETED, null, 75,
-                        "Разработать 75 узлов за неделю", "Полностью пройдите все стадии 75 узлов", 1500)
+                new QuestDef(
+                        "weekly_iron_chain",
+                        "&6&lМастер железа",
+                        List.of("&7Добудьте руду в шахте, переплавьте и скуйте блоки!"),
+                        "IRON_INGOT",
+                        true,
+                        List.of(
+                                new QuestStep(QuestDef.Type.LOOT_AMOUNT, "RAW_IRON", 64, true,
+                                        "Добыть 64 рудного железа на смене в шахте"),
+                                new QuestStep(QuestDef.Type.SMELT_ITEM, "IRON_INGOT", 64, false,
+                                        "Переплавить 64 железных слитка в печи"),
+                                new QuestStep(QuestDef.Type.CRAFT_ITEM, "IRON_BLOCK", 7, false,
+                                        "Скрафтить 7 железных блоков")
+                        ),
+                        3000,
+                        List.of("DIAMOND 2"),
+                        List.of()
+                )
         );
     }
 
@@ -270,5 +306,4 @@ public final class MiningSettings {
         return List.of("TUFF", "STONE", "ANDESITE", "DIORITE", "GRANITE", "DEEPSLATE",
                 "COBBLED_DEEPSLATE", "COBBLESTONE", "NETHERRACK", "BLACKSTONE", "GRAVEL", "DIRT");
     }
-
 }
