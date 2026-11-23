@@ -120,7 +120,7 @@ class QuestBoardTest {
     void breakBlockObtainItemAndMaxAmount65536Work() {
         QuestDef qBreak = QuestDef.fromRaw(Map.of(
                 "id", "q_break_stone",
-                "type", "сломать",
+                "type", "BREAK",
                 "material", "STONE",
                 "amount", 65536,
                 "reward", 5000
@@ -130,7 +130,7 @@ class QuestBoardTest {
 
         assertThrows(IllegalArgumentException.class, () -> QuestDef.fromRaw(Map.of(
                 "id", "q_too_big",
-                "type", "добыть",
+                "type", "MINE",
                 "material", "COAL",
                 "amount", 65537,
                 "reward", 100
@@ -138,7 +138,7 @@ class QuestBoardTest {
 
         QuestDef qGet = QuestDef.fromRaw(Map.of(
                 "id", "q_get_iron",
-                "type", "получить",
+                "type", "OBTAIN",
                 "material", "IRON_INGOT",
                 "amount", 5,
                 "reward", 200
