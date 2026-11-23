@@ -7,6 +7,8 @@ import Frontiks.Craft.jobs.JobRegistry;
 import Frontiks.Craft.quests.v2.QuestV2Models.*;
 import org.yaml.snakeyaml.Yaml;
 
+import static Frontiks.Craft.quests.v2.QuestV2Models.MAX_AMOUNT;
+
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
