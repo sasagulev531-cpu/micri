@@ -546,4 +546,39 @@ class QuestsV2AndSessionsTest {
         assertEquals(List.of("q_custom_geode"), res.completedNow());
         assertEquals(900, paid.get());
     }
+
+    // Проверка отсутствия зашитых квестов и полного удаления заданий при очистке quests.yml
+    @Test
+    void r9_13_deletingQuestsOrEmptyQuestsYmlLeavesZeroQuests() throws Exception {
+        MiningSettings defaultSettings = new MiningSettings();
+        assertTrue(defaultSettings.questsConfigV2().quests().isEmpty(),
+                "Не должно быть зашитых в код дефолтных квестов");
+
+        try (InputStream in = getClass().getClassLoader().getResourceAsStream("quests.yml")) {
+            assertNotNull(in);
+            String defaultQuestsYaml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            ParseResult pr = new QuestsConfigParser(ActionKindRegistry.withBuiltins(), JobRegistry.withDefaultMiner())
+                    .parseYamlString(defaultQuestsYaml, "quests.yml");
+            assertTrue(pr.errors().isEmpty());
+            assertTrue(pr.config().quests().isEmpty(), "Дефолтный quests.yml должен иметь quests: []");
+        }
+
+        // Сначала у игрока было задание, затем админ удалил его из quests.yml -> в меню 0 заданий
+        QuestsConfigParser parser = new QuestsConfigParser(ActionKindRegistry.withBuiltins(), JobRegistry.withDefaultMiner());
+        QuestsConfig withQuest = parser.parseYamlString("""
+                version: 2
+                quests:
+                  - id: temp_quest
+                    category: daily
+                    steps:
+                      - all:
+                          - { event: MINE, material: COAL, amount: 5 }
+                    rewards: { coins: 100 }
+                """, "quests.yml").config();
+        PlayerQuestProfile profile = new PlayerQuestProfile();
+        assertEquals(1, QuestEngineV2.buildViews(profile, withQuest, PlayerContext.DEFAULT_MINER, 1000L, new Random(1)).size());
+
+        QuestsConfig afterDelete = parser.parseYamlString("version: 2\nenabled: true\nquests: []\n", "quests.yml").config();
+        assertEquals(0, QuestEngineV2.buildViews(profile, afterDelete, PlayerContext.DEFAULT_MINER, 2000L, new Random(1)).size());
+    }
 }

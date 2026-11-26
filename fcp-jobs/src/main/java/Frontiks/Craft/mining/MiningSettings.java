@@ -1,11 +1,8 @@
 package Frontiks.Craft.mining;
 
 import Frontiks.Craft.actions.ActionKindRegistry;
-import Frontiks.Craft.api.FcpYamlStorage;
-import Frontiks.Craft.api.LegacyFiles;
 import Frontiks.Craft.jobs.JobRegistry;
 import Frontiks.Craft.quests.QuestDef;
-import Frontiks.Craft.quests.QuestStep;
 import Frontiks.Craft.quests.v2.QuestV2Models;
 import Frontiks.Craft.quests.v2.QuestsConfigParser;
 import Frontiks.Craft.work.HrabotaConfig;
@@ -57,8 +54,8 @@ public final class MiningSettings {
     private String timezone = "Europe/Moscow";
     private int dailyCount = 3;
     private int weeklyCount = 3;
-    private List<QuestDef> dailyPool = builtinDailyPool();
-    private List<QuestDef> weeklyPool = builtinWeeklyPool();
+    private List<QuestDef> dailyPool = List.of();
+    private List<QuestDef> weeklyPool = List.of();
 
     private final List<String> configErrors = new ArrayList<>();
 
@@ -114,17 +111,24 @@ public final class MiningSettings {
     }
 
     /**
-     * Загружает plugins/FCP-Jobs/quests.yml через LegacyFiles.migrate + FcpYamlStorage.load.
-     * Если quests.yml отсутствует — копирует эталонный quests.example.yml (при наличии не переписывает, R10).
+     * Загружает локальный файл plugins/FCP-Jobs/quests.yml напрямую с диска (без миграции в MariaDB
+     * и без подстановки встроенных квестов из JAR). Если в quests.yml список пуст или задания удалены —
+     * в игре отображаются ровно те задания, которые оставлены в plugins/FCP-Jobs/quests.yml.
+     * Рядом создаётся справочный quests.example.yml с готовыми примерами (в игру НЕ загружается).
      */
     private void reloadQuestsConfig() {
         QuestsConfigParser parser = new QuestsConfigParser(actionRegistry, jobRegistry);
 
         if (plugin != null) {
             try {
-                File qFile = LegacyFiles.migrate(plugin, "quests.yml");
-                // Также сохраняем справочный quests.example.yml рядом, если его ещё нет
-                File exampleFile = new File(plugin.getDataFolder(), "quests.example.yml");
+                File dataFolder = plugin.getDataFolder();
+                if (!dataFolder.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    dataFolder.mkdirs();
+                }
+
+                // Справочный quests.example.yml (только для примера администратору, плагином не читается)
+                File exampleFile = new File(dataFolder, "quests.example.yml");
                 if (!exampleFile.exists()) {
                     try (InputStream in = plugin.getResource("quests.example.yml")) {
                         if (in != null) {
@@ -134,37 +138,29 @@ public final class MiningSettings {
                     }
                 }
 
+                // Рабочий конфиг plugins/FCP-Jobs/quests.yml: создаётся только при первом запуске и никогда не перезаписывается
+                File qFile = new File(dataFolder, "quests.yml");
                 if (!qFile.exists()) {
-                    try (InputStream in = plugin.getResource("quests.example.yml")) {
+                    try (InputStream in = plugin.getResource("quests.yml")) {
                         if (in != null) {
                             Files.copy(in, qFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                         } else {
-                            plugin.saveResource("quests.yml", false);
+                            Files.writeString(qFile.toPath(), "version: 2\nenabled: true\nquests: []\n", StandardCharsets.UTF_8);
                         }
                     }
                 }
 
-                // Загружаем через FcpYamlStorage (соблюдение конвенции FCP-Core §1) + читаем текст для точных путей ошибок
-                FcpYamlStorage.load(plugin, qFile);
                 String rawYaml = Files.readString(qFile.toPath(), StandardCharsets.UTF_8);
                 QuestV2Models.ParseResult res = parser.parseYamlString(rawYaml, "quests.yml");
                 applyParsedQuests(res);
-                return;
             } catch (Exception e) {
                 configErrors.add("Не удалось прочитать plugins/FCP-Jobs/quests.yml: " + e.getMessage());
+                questsConfigV2 = QuestV2Models.QuestsConfig.empty();
             }
+            return;
         }
 
-        // Fallback для тестов без plugin-инстанса: читаем встроенный ресурс quests.example.yml
-        try (InputStream in = MiningSettings.class.getClassLoader().getResourceAsStream("quests.example.yml")) {
-            if (in != null) {
-                String yaml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-                applyParsedQuests(parser.parseYamlString(yaml, "quests.example.yml"));
-                return;
-            }
-        } catch (Exception ignored) {
-        }
-
+        // Без plugin-инстанса (unit-тесты конструктора по умолчанию) — пустой конфиг без зашитых квестов
         questsConfigV2 = QuestV2Models.QuestsConfig.empty();
     }
 
@@ -274,40 +270,6 @@ public final class MiningSettings {
         return List.of(
                 new LootEntry("COBBLESTONE", 2, 4, 1.0),
                 new LootEntry("COAL", 1, 1, 0.25)
-        );
-    }
-
-    private static List<QuestDef> builtinDailyPool() {
-        return List.of(
-                new QuestDef("daily_cobble_64", QuestDef.Type.LOOT_AMOUNT, "COBBLESTONE", 64,
-                        "&fГорная порода", "Добудьте булыжник на смене в шахте", 200),
-                new QuestDef("daily_coal_24", QuestDef.Type.LOOT_AMOUNT, "COAL", 24,
-                        "&fТопливо для печей", "Добудьте уголь из узлов шахты", 300),
-                new QuestDef("daily_nodes_15", QuestDef.Type.NODES_COMPLETED, null, 15,
-                        "&fУдарник смены", "Полностью разработайте узлы шахты", 400)
-        );
-    }
-
-    private static List<QuestDef> builtinWeeklyPool() {
-        return List.of(
-                new QuestDef(
-                        "weekly_iron_chain",
-                        "&6&lМастер железа",
-                        List.of("&7Добудьте руду в шахте, переплавьте и скуйте блоки!"),
-                        "IRON_INGOT",
-                        true,
-                        List.of(
-                                new QuestStep(QuestDef.Type.LOOT_AMOUNT, "RAW_IRON", 64, true,
-                                        "Добыть 64 рудного железа на смене в шахте"),
-                                new QuestStep(QuestDef.Type.SMELT_ITEM, "IRON_INGOT", 64, false,
-                                        "Переплавить 64 железных слитка в печи"),
-                                new QuestStep(QuestDef.Type.CRAFT_ITEM, "IRON_BLOCK", 7, false,
-                                        "Скрафтить 7 железных блоков")
-                        ),
-                        3000,
-                        List.of("DIAMOND 2"),
-                        List.of()
-                )
         );
     }
 

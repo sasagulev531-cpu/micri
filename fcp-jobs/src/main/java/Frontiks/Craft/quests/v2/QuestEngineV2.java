@@ -253,6 +253,11 @@ public final class QuestEngineV2 {
             }
         }
 
+        // Очищаем устаревшие категории, которых больше нет в конфиге
+        if (profile.categories.keySet().removeIf(cat -> !config.periods().containsKey(cat))) {
+            changed = true;
+        }
+
         // Ленивая авто-разблокировка, если предыдущее задание уже было выполнено и оплачено
         for (QuestSpec spec : config.quests()) {
             if (profile.completedAndPaidIds.contains(spec.id())) {

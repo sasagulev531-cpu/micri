@@ -1,344 +1,37 @@
-# ==============================================================================
-# FCP-Jobs — Конфигурация заданий шахтёра v2 (plugins/FCP-Jobs/quests.yml)
-# Формат v1 (daily.pool / weekly.pool) также поддерживается автоматически!
-# Проверка конфига:     /questsadmin validate   (или /mnode questvalidate)
-# Живая перезагрузка:   /questsadmin reload     (или /mnode reload)
-# ==============================================================================
+# =====================================================================
+# plugins/FCP-Jobs/quests.yml — Рабочий конфиг заданий Шахтёра (формат v2)
+# =====================================================================
+# Зашитых в код квестов нет: в игре работают ТОЛЬКО те задания, которые
+# вы добавите ниже в список `quests:` (при `quests: []` заданий нет).
+#
+# Готовые примеры 16 заданий всех типов лежат рядом в файле:
+#   plugins/FCP-Jobs/quests.example.yml
+# Просто скопируйте нужные блоки оттуда в `quests:` и выполните:
+#   /qadmin validate   — проверить синтаксис
+#   /qadmin reload     — применить изменения без рестарта сервера
+# =====================================================================
 
 version: 2
 enabled: true
 
 defaults:
-  timezone: "Europe/Moscow"     # Часовой пояс сброса (00:00 для daily, ПН 00:00 для weekly)
-  accept: auto                  # auto (сразу в зачёт) | manual (нужно нажать ЛКМ «Взять задание»)
-  require-working: true         # Шахтные условия засчитываются только на активной смене в зоне шахты
+  timezone: "Europe/Moscow"
+  accept: auto
+  require-working: true
 
 security:
-  # Белый список префиксов консольных команд в rewards.commands.
-  # Пустой список [] полностью запрещает исполнение команд (монеты и предметы при этом выдаются).
   reward-commands-whitelist: []
 
 periods:
-  daily:   { template: daily,    count: 3 }
-  weekly:  { template: weekly,   count: 3 }
-  monthly: { template: interval, days: 30, count: 1 }
+  daily:
+    template: daily
+    count: 3
+  weekly:
+    template: weekly
+    count: 3
+  monthly:
+    template: interval
+    days: 30
+    count: 1
 
-quests:
-  # ----------------------------------------------------------------------------
-  # ЕЖЕДНЕВНЫЕ ЗАДАНИЯ ШАХТЁРА (category: daily, accept: auto)
-  # ----------------------------------------------------------------------------
-  - id: daily_cobble_64
-    title: "&fГорная порода"
-    icon: COBBLESTONE
-    category: daily
-    accept: auto
-    description:
-      - "&7Добудьте булыжник при разработке узлов шахты."
-    steps:
-      - name: "Добыть 64 булыжника"
-        all:
-          - { event: MINE, material: COBBLESTONE, amount: 64 }
-    rewards:
-      coins: 200
-
-  - id: daily_break_rock_120
-    title: "&fПроходчик забоя"
-    icon: STONE_PICKAXE
-    category: daily
-    accept: auto
-    description:
-      - "&7Разбивайте любые породы и стадии узлов на смене."
-    steps:
-      - name: "Сломать 120 стадий породы"
-        all:
-          - { event: BREAK, material: ANY, amount: 120 }
-    rewards:
-      coins: 250
-
-  - id: daily_shift_coins_500
-    title: "&fВыгодная смена"
-    icon: GOLD_NUGGET
-    category: daily
-    accept: auto
-    description:
-      - "&7Заработайте монеты во время работы в шахте."
-    steps:
-      - name: "Заработать 500 монет на смене"
-        all:
-          - { event: EARN_COINS, amount: 500 }
-    rewards:
-      coins: 300
-
-  - id: daily_nodes_15
-    title: "&fУдарник смены"
-    icon: IRON_PICKAXE
-    category: daily
-    accept: auto
-    description:
-      - "&7Полностью разработайте горные узлы до истощения."
-    steps:
-      - name: "Разработать 15 узлов"
-        all:
-          - { event: NODES_COMPLETED, amount: 15 }
-    rewards:
-      coins: 350
-
-  - id: daily_upper_copper
-    title: "&fВерхний медный горизонт"
-    icon: RAW_COPPER
-    category: daily
-    accept: auto
-    description:
-      - "&7Добудьте медную руду на отметках Y >= 0."
-    steps:
-      - name: "Добыть 24 рудной меди (Y >= 0)"
-        all:
-          - { event: MINE, material: RAW_COPPER, amount: 24, min-depth: 0 }
-    rewards:
-      coins: 320
-
-  - id: daily_deep_coal
-    title: "&fУгольный пласт"
-    icon: COAL
-    category: daily
-    accept: auto
-    description:
-      - "&7Добудьте уголь на глубине не выше Y = 120."
-    steps:
-      - name: "Добыть 24 угля (Y <= 120)"
-        all:
-          - { event: MINE, material: COAL, amount: 24, max-depth: 120 }
-    rewards:
-      coins: 300
-
-  # ----------------------------------------------------------------------------
-  # ЕЖЕНЕДЕЛЬНЫЕ ЦЕПОЧКИ И КОМБИНИРОВАННЫЕ ЗАДАЧИ (category: weekly, accept: manual)
-  # ----------------------------------------------------------------------------
-  - id: weekly_iron_foundry
-    title: "&6&lЖелезный промысел"
-    icon: IRON_INGOT
-    category: weekly
-    accept: manual
-    description:
-      - "&7Полный цикл: добудьте железную руду на смене,"
-      - "&7переплавьте в слитки и скуйте железные блоки."
-    steps:
-      - name: "Добыть 64 рудного железа и 10 узлов"
-        all:
-          - { event: MINE, material: RAW_IRON, amount: 64 }
-          - { event: COMPLETE_NODES, amount: 10 }
-      - name: "Переплавить 64 железных слитка"
-        all:
-          - { event: SMELT, material: IRON_INGOT, amount: 64, require-working: false }
-      - name: "Скрафтить 7 железных блоков"
-        all:
-          - { event: CRAFT, material: IRON_BLOCK, amount: 7, require-working: false }
-    rewards:
-      coins: 3000
-      items:
-        - { material: DIAMOND, amount: 2, chance: 1.0 }
-        - { material: EMERALD, amount: 2, chance: 0.5 }
-
-  - id: weekly_any_ores_and_time
-    title: "&e&lДолгая вахта"
-    icon: CLOCK
-    category: weekly
-    accept: manual
-    description:
-      - "&7Отработайте вахту в шахте, добывая любую руду,"
-      - "&7и выполните норму заработка."
-    steps:
-      - name: "Добыть 80 ед. сырья (уголь/медь/железо) и 20 мин. смены"
-        any-amount: 80
-        any:
-          - { event: MINE, material: COAL }
-          - { event: MINE, material: RAW_COPPER }
-          - { event: MINE, material: RAW_IRON }
-        time:
-          as-job: MINER
-          minutes: 20
-      - name: "Заработать 1500 монет на смене"
-        all:
-          - { event: EARN_COINS, amount: 1500 }
-    rewards:
-      coins: 2800
-      items:
-        - { material: GOLDEN_APPLE, amount: 2, chance: 1.0 }
-
-  - id: weekly_gold_jeweler
-    title: "&e&lЗолотая жила"
-    icon: GOLD_INGOT
-    category: weekly
-    accept: manual
-    description:
-      - "&7Добудьте золото в шахте, выплавьте слитки"
-      - "&7и приготовьте золотые яблоки."
-    steps:
-      - name: "Добыть 32 рудного золота в шахте"
-        all:
-          - { event: MINE, material: RAW_GOLD, amount: 32 }
-      - name: "Переплавить 32 золотых слитка"
-        all:
-          - { event: SMELT, material: GOLD_INGOT, amount: 32, require-working: false }
-      - name: "Скрафтить 4 золотых яблока"
-        all:
-          - { event: CRAFT, material: GOLDEN_APPLE, amount: 4, require-working: false }
-    rewards:
-      coins: 4500
-      items:
-        - { material: DIAMOND, amount: 3, chance: 1.0 }
-        - { material: NETHERITE_SCRAP, amount: 1, chance: 0.25 }
-      commands: []
-
-  - id: weekly_miner_veteran_actions
-    title: "&6&lОбразцовый шахтёр"
-    icon: GOLDEN_PICKAXE
-    category: weekly
-    accept: manual
-    requires:
-      job: MINER
-    description:
-      - "&7Задание для активного шахтёра на смене:"
-      - "&7выполняйте рабочие действия и держите смену."
-    steps:
-      - name: "250 действий шахтёра и 30 минут смены"
-        all:
-          - { event: JOB_ACTION, job: MINER, amount: 250 }
-        time:
-          as-job: MINER
-          minutes: 30
-    rewards:
-      coins: 2500
-
-  - id: weekly_deep_horizon
-    title: "&9&lГлубинная разведка"
-    icon: DEEPSLATE
-    category: weekly
-    accept: manual
-    requires:
-      job: MINER
-    description:
-      - "&7Разработка нижних горизонтов шахты."
-    steps:
-      - name: "Добыть 48 рудного железа на глубине Y >= -64"
-        all:
-          - { event: MINE, material: RAW_IRON, amount: 48, min-depth: -64 }
-          - { event: BREAK, material: ANY, amount: 150 }
-    rewards:
-      coins: 2600
-
-  # ----------------------------------------------------------------------------
-  # РАЗОВЫЕ ЦЕПОЧКИ ПРОГРЕССИИ С КОНВЕЙЕРОМ РАЗБЛОКИРОВОК (category: once)
-  # «Новичок забоя → Горный мастер → Старатель глубин»
-  # ----------------------------------------------------------------------------
-  - id: once_rank_1_novice
-    title: "&d&lI. Новичок забоя"
-    icon: WOODEN_PICKAXE
-    category: once
-    accept: auto
-    requires:
-      job: MINER
-    description:
-      - "&7Первая ступень мастерства шахтёра."
-      - "&7Открывает задание «Горный мастер»."
-    steps:
-      - name: "Разработать первые 20 узлов шахты"
-        all:
-          - { event: COMPLETE_NODES, amount: 20 }
-    rewards:
-      coins: 500
-      items:
-        - { material: IRON_INGOT, amount: 8, chance: 1.0 }
-    on-complete:
-      unlock:
-        - once_rank_2_master
-
-  - id: once_rank_2_master
-    title: "&d&lII. Горный мастер"
-    icon: IRON_PICKAXE
-    category: once
-    accept: manual
-    requires:
-      quest: once_rank_1_novice
-    description:
-      - "&7Вторая ступень мастерства шахтёра."
-      - "&7Открывает финальное испытание «Старатель глубин»."
-    steps:
-      - name: "Добыть 64 рудного железа в шахте"
-        all:
-          - { event: MINE, material: RAW_IRON, amount: 64 }
-      - name: "Переплавить 64 железных слитка"
-        all:
-          - { event: SMELT, material: IRON_INGOT, amount: 64, require-working: false }
-    rewards:
-      coins: 2000
-      items:
-        - { material: DIAMOND, amount: 2, chance: 1.0 }
-    on-complete:
-      unlock:
-        - once_rank_3_prospector
-
-  - id: once_rank_3_prospector
-    title: "&d&lIII. Старатель глубин"
-    icon: DIAMOND_PICKAXE
-    category: once
-    accept: manual
-    requires:
-      quest: once_rank_2_master
-    description:
-      - "&7Высшая ступень горного дела!"
-    steps:
-      - name: "Разработать 100 узлов шахты"
-        all:
-          - { event: COMPLETE_NODES, amount: 100 }
-      - name: "Заработать 5000 монет на смене"
-        all:
-          - { event: EARN_COINS, amount: 5000 }
-      - name: "Скрафтить 10 железных блоков"
-        all:
-          - { event: CRAFT, material: IRON_BLOCK, amount: 10, require-working: false }
-    rewards:
-      coins: 7500
-      items:
-        - { material: DIAMOND, amount: 5, chance: 1.0 }
-        - { material: EMERALD, amount: 8, chance: 0.75 }
-
-  - id: once_first_shift_actions
-    title: "&dПервая трудовая норма"
-    icon: LANTERN
-    category: once
-    accept: auto
-    description:
-      - "&7Разовое поощрение за первые 50 рабочих действий в шахте."
-    steps:
-      - name: "Выполнить 50 действий на смене"
-        all:
-          - { event: JOB_ACTION, job: MINER, amount: 50 }
-    rewards:
-      coins: 400
-
-  # ----------------------------------------------------------------------------
-  # ИНТЕРВАЛЬНОЕ ЗАДАНИЕ (category: monthly — каждые 30 дней)
-  # ----------------------------------------------------------------------------
-  - id: monthly_expedition
-    title: "&b&lБольшая горная экспедиция"
-    icon: NETHERITE_PICKAXE
-    category: monthly
-    accept: manual
-    description:
-      - "&7Крупный 30-дневный контракт на разработку узлов"
-      - "&7и поставку готовых слитков."
-    steps:
-      - name: "Разработать 150 узлов и 60 минут смены"
-        all:
-          - { event: COMPLETE_NODES, amount: 150 }
-        time:
-          as-job: MINER
-          minutes: 60
-      - name: "Получить 128 железных слитков"
-        all:
-          - { event: OBTAIN, material: IRON_INGOT, amount: 128, require-working: false }
-    rewards:
-      coins: 10000
-      items:
-        - { material: DIAMOND, amount: 8, chance: 1.0 }
+quests: []
