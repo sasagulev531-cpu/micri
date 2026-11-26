@@ -454,8 +454,8 @@ class QuestsV2AndSessionsTest {
 
             MiningSettings settings = new MiningSettings();
             assertTrue(settings.configErrors().isEmpty(), () -> "Ошибки дефолтного конфига: " + settings.configErrors());
-            assertTrue(settings.questsConfigV2().quests().size() >= 15,
-                    "Встроенный quests.example.yml должен содержать >= 15 заданий шахтёра");
+            assertTrue(settings.questsConfigV2().quests().isEmpty(),
+                    "По умолчанию зашитых в код квестов быть не должно (примеры лежат отдельно в quests.example.yml)");
         });
     }
 
