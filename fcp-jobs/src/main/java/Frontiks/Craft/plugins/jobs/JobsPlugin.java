@@ -90,7 +90,7 @@ public final class JobsPlugin extends JavaPlugin {
 
         var pm = getServer().getPluginManager();
         pm.registerEvents(new QuitListener(), this);
-        pm.registerEvents(new WorkMenuListener(), this);
+        pm.registerEvents(new WorkMenuListener(this.questManager, settings), this);
         pm.registerEvents(new WorkCheckListener(this, this.questManager.actionReporter()), this);
         pm.registerEvents(new MiningListener(this, this.nodeManager), this);
         pm.registerEvents(new MiningNodeMenuListener(this, this.nodeManager), this);

@@ -145,7 +145,17 @@ public class WorkManager {
         int count = tracker.retryPendingPayouts(
                 System.currentTimeMillis(),
                 manual,
-                WorkManager::tryAddCoins,
+                (uid, coins) -> {
+                    boolean ok = tryAddCoins(uid, coins, manual);
+                    if (ok && coins > 0) {
+                        Player online = Bukkit.getPlayer(uid);
+                        if (online != null && online.isOnline()) {
+                            online.sendMessage(color("" + PREFIX
+                                    + "§aЗадержанная выплата за смену (§f" + coins + " §aмонет) зачислена!"));
+                        }
+                    }
+                    return ok;
+                },
                 msg -> {
                     if (plugin != null) plugin.getLogger().severe(msg);
                     else Bukkit.getLogger().severe("[FCP-Jobs] " + msg);
@@ -158,12 +168,16 @@ public class WorkManager {
     }
 
     private static boolean tryAddCoins(UUID playerId, int coins) {
+        return tryAddCoins(playerId, coins, true);
+    }
+
+    private static boolean tryAddCoins(UUID playerId, int coins, boolean logWarn) {
         if (coins <= 0) return true;
         try {
             FcpServices.require(EconomyService.class).addCoins(playerId, coins);
             return true;
         } catch (Throwable t) {
-            if (plugin != null) {
+            if (logWarn && plugin != null) {
                 plugin.getLogger().warning("Не удалось начислить " + coins + " монет смены игроку " + playerId + ": " + t.getMessage());
             }
             return false;

@@ -20,6 +20,7 @@ commands:
     permission: fcp.admin.jobs.node
   quests:
     description: Меню заданий шахтёра
+    aliases: [mquests, minequests, jobquests]
     permission: fcp.jobs.quests
   questsadmin:
     description: Диагностика и перезагрузка конфига заданий quests.yml
@@ -46,9 +47,6 @@ commands:
   fishinggive5:
     description: Купить удочку уровня 5
 permissions:
-  fcp.admin.jobs.region:
-    description: Разрешает задавать границы рабочей зоны шахты (/setgranic)
-    default: op
   fcp.admin.jobs.node:
     description: Разрешает управлять добываемыми узлами шахты (/miningnode и маркер-палочка)
     default: op

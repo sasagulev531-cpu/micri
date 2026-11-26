@@ -2,6 +2,9 @@ package Frontiks.Craft.listeners;
 
 import Frontiks.Craft.gui.MenuManager;
 import Frontiks.Craft.gui.WorkMenu;
+import Frontiks.Craft.mining.MiningSettings;
+import Frontiks.Craft.quests.QuestManager;
+import Frontiks.Craft.quests.QuestsMenu;
 import Frontiks.Craft.utils.color;
 import Frontiks.Craft.work.WorkManager;
 import org.bukkit.Bukkit;
@@ -13,6 +16,18 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
 public class WorkMenuListener implements Listener {
+
+    private final QuestManager questManager;
+    private final MiningSettings settings;
+
+    public WorkMenuListener(QuestManager questManager, MiningSettings settings) {
+        this.questManager = questManager;
+        this.settings = settings;
+    }
+
+    public WorkMenuListener() {
+        this(null, null);
+    }
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
@@ -34,11 +49,20 @@ public class WorkMenuListener implements Listener {
 
         int slot = e.getRawSlot();
 
-        // Слот 12 - Задачи шахтёра (на месте старого магазина кирок)
+        // Слот 12 - Задачи шахтёра (открываем GUI напрямую, чтобы не конфликтовать с FCP-Quests /quests)
         if (slot == 12) {
-            p.closeInventory();
             MenuManager.removeMenu(p.getUniqueId());
-            Bukkit.dispatchCommand(p, "quests");
+            if (!p.hasPermission("fcp.jobs.quests")) {
+                p.closeInventory();
+                p.sendMessage(color.color("" + Frontiks.Craft.utils.Msg.PREFIX + "&cНет прав."));
+                return;
+            }
+            if (questManager != null && settings != null) {
+                new QuestsMenu(questManager, settings).open(p);
+            } else {
+                p.closeInventory();
+                Bukkit.dispatchCommand(p, "fcp-jobs:quests");
+            }
             return;
         }
 
