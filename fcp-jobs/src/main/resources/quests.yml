@@ -1,0 +1,37 @@
+# =====================================================================
+# plugins/FCP-Jobs/quests.yml — Рабочий конфиг заданий Шахтёра (формат v2)
+# =====================================================================
+# Зашитых в код квестов нет: в игре работают ТОЛЬКО те задания, которые
+# вы добавите ниже в список `quests:` (при `quests: []` заданий нет).
+#
+# Готовые примеры 16 заданий всех типов лежат рядом в файле:
+#   plugins/FCP-Jobs/quests.example.yml
+# Просто скопируйте нужные блоки оттуда в `quests:` и выполните:
+#   /qadmin validate   — проверить синтаксис
+#   /qadmin reload     — применить изменения без рестарта сервера
+# =====================================================================
+
+version: 2
+enabled: true
+
+defaults:
+  timezone: "Europe/Moscow"
+  accept: auto
+  require-working: true
+
+security:
+  reward-commands-whitelist: []
+
+periods:
+  daily:
+    template: daily
+    count: 3
+  weekly:
+    template: weekly
+    count: 3
+  monthly:
+    template: interval
+    days: 30
+    count: 1
+
+quests: []
