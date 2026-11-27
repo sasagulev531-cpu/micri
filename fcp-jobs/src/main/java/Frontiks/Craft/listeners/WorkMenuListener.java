@@ -1,6 +1,7 @@
 package Frontiks.Craft.listeners;
 
 import Frontiks.Craft.gui.MenuManager;
+import Frontiks.Craft.gui.WorkHubMenu;
 import Frontiks.Craft.gui.WorkMenu;
 import Frontiks.Craft.mining.MiningSettings;
 import Frontiks.Craft.quests.QuestManager;
@@ -35,7 +36,25 @@ public class WorkMenuListener implements Listener {
 
         if (e.getView() == null || e.getView().getTitle() == null) return;
 
-        // Проверяем по ID меню
+        // 1) Клики в хабе выбора работ (/work)
+        if (MenuManager.isInMenu(p.getUniqueId(), WorkHubMenu.MENU_ID)) {
+            e.setCancelled(true);
+            int slot = e.getRawSlot();
+            if (slot < 0 || slot >= WorkHubMenu.INV_SIZE) return;
+            if (slot == 22) {
+                p.closeInventory();
+                return;
+            }
+            String jobId = WorkHubMenu.jobIdAt(p.getUniqueId(), slot);
+            if (jobId != null) {
+                MenuManager.removeMenu(p.getUniqueId());
+                WorkHubMenu.clearState(p.getUniqueId());
+                WorkMenu.openFromHub(p);
+            }
+            return;
+        }
+
+        // 2) Клики в меню конкретной работы (Шахтёр)
         if (!MenuManager.isInMenu(p.getUniqueId(), WorkMenu.MENU_ID)) {
             return;
         }
@@ -48,6 +67,12 @@ public class WorkMenuListener implements Listener {
         }
 
         int slot = e.getRawSlot();
+
+        if (slot == 22 && WorkMenu.isOpenedFromHub(p.getUniqueId())) {
+            MenuManager.removeMenu(p.getUniqueId());
+            WorkHubMenu.open(p, settings);
+            return;
+        }
 
         // Слот 12 - Задачи шахтёра (открываем GUI напрямую, чтобы не конфликтовать с FCP-Quests /quests)
         if (slot == 12) {
@@ -88,7 +113,8 @@ public class WorkMenuListener implements Listener {
     public void onDrag(InventoryDragEvent e) {
         if (!(e.getWhoClicked() instanceof Player p)) return;
 
-        if (MenuManager.isInMenu(p.getUniqueId(), WorkMenu.MENU_ID)) {
+        if (MenuManager.isInMenu(p.getUniqueId(), WorkMenu.MENU_ID)
+                || MenuManager.isInMenu(p.getUniqueId(), WorkHubMenu.MENU_ID)) {
             e.setCancelled(true);
         }
     }
@@ -99,6 +125,9 @@ public class WorkMenuListener implements Listener {
 
         if (MenuManager.isInMenu(p.getUniqueId(), WorkMenu.MENU_ID)) {
             MenuManager.removeMenu(p.getUniqueId());
+        } else if (MenuManager.isInMenu(p.getUniqueId(), WorkHubMenu.MENU_ID)) {
+            MenuManager.removeMenu(p.getUniqueId());
+            WorkHubMenu.clearState(p.getUniqueId());
         }
     }
 }

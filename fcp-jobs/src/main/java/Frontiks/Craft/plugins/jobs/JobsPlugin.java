@@ -71,8 +71,9 @@ public final class JobsPlugin extends JavaPlugin {
         );
 
         bind("setgranic", new SetGranicCommand());
-        bind("work", new WorkMenuCommand());
-        bind("workmenu", new WorkMenuCommand());
+        WorkMenuCommand workCmd = new WorkMenuCommand(settings);
+        bind("work", workCmd);
+        bind("workmenu", workCmd);
 
         HrabotaGiveCommand h = new HrabotaGiveCommand();
         for (int i = 1; i <= 5; i++) {

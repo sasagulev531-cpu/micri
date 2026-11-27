@@ -11,7 +11,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class WorkMenu {
 
@@ -20,6 +22,21 @@ public class WorkMenu {
     public static final String MENU_ID = "work_menu";
 
     private static final String WORK_SKULL_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGY5OWRjMzJhZDRlZGFkNTI5ODVlZmQ3ZTNhZWI0MmI0MzY1NDA3MTM3MzY3NDJmNmQ5YTNiOTFjMzVlZjg3MSJ9fX0=";
+    private static final Map<UUID, Boolean> OPENED_FROM_HUB = new ConcurrentHashMap<>();
+
+    public static void openFromHub(Player p) {
+        OPENED_FROM_HUB.put(p.getUniqueId(), Boolean.TRUE);
+        open(p);
+    }
+
+    public static void openDirect(Player p) {
+        OPENED_FROM_HUB.put(p.getUniqueId(), Boolean.FALSE);
+        open(p);
+    }
+
+    public static boolean isOpenedFromHub(UUID playerId) {
+        return Boolean.TRUE.equals(OPENED_FROM_HUB.get(playerId));
+    }
 
     public static void open(Player p) {
         Inventory inv = Bukkit.createInventory(null, SIZE, color.color(TITLE));
@@ -38,6 +55,17 @@ public class WorkMenu {
 
         // Информация (слот 4)
         inv.setItem(4, createInfo(p));
+
+        if (isOpenedFromHub(p.getUniqueId())) {
+            ItemStack back = new ItemStack(Material.SPECTRAL_ARROW);
+            ItemMeta bm = back.getItemMeta();
+            if (bm != null) {
+                bm.setDisplayName(color.color("&e← К выбору работ"));
+                bm.setLore(Arrays.asList(color.color("&7Вернуться к списку профессий")));
+                back.setItemMeta(bm);
+            }
+            inv.setItem(22, back);
+        }
 
         p.openInventory(inv);
         // Запоминаем после openInventory, чтобы закрытие предыдущего GUI не стирало MENU_ID

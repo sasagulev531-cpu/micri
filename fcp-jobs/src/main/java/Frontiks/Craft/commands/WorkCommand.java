@@ -1,20 +1,17 @@
 package Frontiks.Craft.commands;
 
-import Frontiks.Craft.gui.WorkMenu;
-import org.bukkit.command.*;
+import Frontiks.Craft.gui.WorkHubMenu;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 public class WorkCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-
-        if (!(sender instanceof Player)) return true;
-
-        Player p = (Player) sender;
-
-        WorkMenu.open(p);
-
+        if (!(sender instanceof Player p)) return true;
+        WorkHubMenu.open(p, (Frontiks.Craft.mining.MiningSettings) null);
         return true;
     }
 }
