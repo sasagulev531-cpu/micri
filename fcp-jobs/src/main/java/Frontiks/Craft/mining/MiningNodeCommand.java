@@ -25,7 +25,7 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
     private static final List<String> SUBCOMMANDS = List.of(
             "wand", "list", "info", "create", "delete", "restore", "restoreall",
             "validate", "questvalidate", "reload", "cooldown", "cooldownall", "loot", "lootall", "applyall", "help");
-    private static final List<String> LOOT_SUB = List.of("list", "add", "remove", "clear");
+    private static final List<String> LOOT_SUB = List.of("list", "add", "remove", "clear", "preset");
 
     private final JavaPlugin plugin;
     private final MiningNodeManager manager;
@@ -210,10 +210,11 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
             case "add" -> {
                 if (args.length < 6) {
                     p.sendMessage(color.color("&cИспользование: /miningnode loot add <материал> <min> <max> <шанс 0..1>"));
-                    p.sendMessage(color.color("&7Пример: /miningnode loot add COBBLESTONE 2 4 1.0"));
+                    p.sendMessage(color.color("&7Пример: /miningnode loot add RAW_IRON 1 2 0.20"));
                     return;
                 }
-                Material material = Material.matchMaterial(args[2].trim().toUpperCase(Locale.ROOT));
+                String normalizedName = LootTable.normalizeDropMaterial(args[2]);
+                Material material = Material.matchMaterial(normalizedName);
                 Integer min = parseInt(args[3]);
                 Integer max = parseInt(args[4]);
                 Double chance = parseDouble(args[5]);
@@ -230,6 +231,14 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
                 try {
                     manager.setLoot(node, loot);
                     p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aЛут добавлен: " + material.name()));
+                } catch (MiningNodeManager.MiningNodeException ex) {
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
+                }
+            }
+            case "preset" -> {
+                try {
+                    manager.setLoot(node, LootTable.defaultMinePreset121());
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aУстановлен готовый пресет руд 1.21.11 для этого узла!"));
                 } catch (MiningNodeManager.MiningNodeException ex) {
                     p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
                 }
@@ -286,10 +295,11 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
             case "add" -> {
                 if (args.length < 6) {
                     p.sendMessage(color.color("&cИспользование: /miningnode lootall add <материал> <min> <max> <шанс 0..1>"));
-                    p.sendMessage(color.color("&7Пример: /miningnode lootall add IRON_INGOT 1 3 0.5"));
+                    p.sendMessage(color.color("&7Пример: /miningnode lootall add RAW_IRON 1 2 0.20"));
                     return;
                 }
-                Material material = Material.matchMaterial(args[2].trim().toUpperCase(Locale.ROOT));
+                String normalizedName = LootTable.normalizeDropMaterial(args[2]);
+                Material material = Material.matchMaterial(normalizedName);
                 Integer min = parseInt(args[3]);
                 Integer max = parseInt(args[4]);
                 Double chance = parseDouble(args[5]);
@@ -307,6 +317,15 @@ public final class MiningNodeCommand implements CommandExecutor, TabCompleter {
                     int updated = manager.setGlobalLoot(loot);
                     p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&aЛут &f" + material.name()
                             + " &aдобавлен для ВСЕХ узлов (&e" + updated + " шт.&a) и для новых!"));
+                } catch (MiningNodeManager.MiningNodeException ex) {
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
+                }
+            }
+            case "preset" -> {
+                try {
+                    int updated = manager.setGlobalLoot(LootTable.defaultMinePreset121());
+                    p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX
+                            + "&aГотовый пресет руд 1.21.11 установлен для ВСЕХ узлов (&e" + updated + " шт.&a)!"));
                 } catch (MiningNodeManager.MiningNodeException ex) {
                     p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&c" + ex.getMessage()));
                 }

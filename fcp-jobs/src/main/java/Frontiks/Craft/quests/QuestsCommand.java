@@ -30,7 +30,7 @@ public final class QuestsCommand implements CommandExecutor {
             p.sendMessage(color.color(Frontiks.Craft.utils.Msg.PREFIX + "&cНет прав."));
             return true;
         }
-        new QuestsMenu(quests, settings).open(p);
+        new QuestsHubMenu(quests, settings).open(p);
         return true;
     }
 }

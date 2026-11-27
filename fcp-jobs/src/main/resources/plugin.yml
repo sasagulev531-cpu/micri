@@ -6,6 +6,7 @@ author: Frontiks
 description: FCP jobs and mine system
 depend: [FCP-Core]
 softdepend: [FCP-EconomyMarket]
+loadbefore: [FCP-Quests]
 commands:
   setgranic:
     description: Настройка зоны шахты

@@ -267,10 +267,7 @@ public final class MiningSettings {
     }
 
     private static List<LootEntry> builtinDefaultLoot() {
-        return List.of(
-                new LootEntry("COBBLESTONE", 2, 4, 1.0),
-                new LootEntry("COAL", 1, 1, 0.25)
-        );
+        return LootTable.defaultMinePreset121();
     }
 
     private static List<String> defaultPalette() {

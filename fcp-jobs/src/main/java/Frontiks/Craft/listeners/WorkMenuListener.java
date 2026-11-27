@@ -58,7 +58,7 @@ public class WorkMenuListener implements Listener {
                 return;
             }
             if (questManager != null && settings != null) {
-                new QuestsMenu(questManager, settings).open(p);
+                new QuestsMenu(questManager, settings).openFromWork(p);
             } else {
                 p.closeInventory();
                 Bukkit.dispatchCommand(p, "fcp-jobs:quests");

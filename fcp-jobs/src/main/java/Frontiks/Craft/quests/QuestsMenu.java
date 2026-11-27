@@ -40,8 +40,15 @@ public final class QuestsMenu {
             37, 38, 39, 40, 41, 42, 43
     };
 
+    public enum ReturnTarget {
+        NONE,
+        WORK_MENU,
+        HUB_MENU
+    }
+
     private static final Map<UUID, Map<Integer, String>> SLOT_QUESTS = new ConcurrentHashMap<>();
     private static final Map<UUID, Integer> CURRENT_PAGE = new ConcurrentHashMap<>();
+    private static final Map<UUID, ReturnTarget> RETURN_TARGET = new ConcurrentHashMap<>();
 
     private final QuestManager quests;
     private final MiningSettings settings;
@@ -60,8 +67,22 @@ public final class QuestsMenu {
         return CURRENT_PAGE.getOrDefault(playerId, 0);
     }
 
+    public static ReturnTarget returnTargetOf(UUID playerId) {
+        return RETURN_TARGET.getOrDefault(playerId, ReturnTarget.NONE);
+    }
+
     public static void clearState(UUID playerId) {
         SLOT_QUESTS.remove(playerId);
+    }
+
+    public void openFromWork(Player player) {
+        RETURN_TARGET.put(player.getUniqueId(), ReturnTarget.WORK_MENU);
+        open(player, 0);
+    }
+
+    public void openFromHub(Player player) {
+        RETURN_TARGET.put(player.getUniqueId(), ReturnTarget.HUB_MENU);
+        open(player, 0);
     }
 
     public void open(Player player) {
@@ -105,6 +126,13 @@ public final class QuestsMenu {
         }
         if (page + 1 < totalPages) {
             inv.setItem(53, named(Material.ARROW, "&eСледующая страница »", List.of("&7Страница " + (page + 2))));
+        }
+
+        ReturnTarget rt = RETURN_TARGET.getOrDefault(player.getUniqueId(), ReturnTarget.NONE);
+        if (rt == ReturnTarget.WORK_MENU) {
+            inv.setItem(48, named(Material.SPECTRAL_ARROW, "&e← Назад к работе", List.of("&7Вернуться в меню Шахтёра")));
+        } else if (rt == ReturnTarget.HUB_MENU) {
+            inv.setItem(48, named(Material.SPECTRAL_ARROW, "&e← К разделам квестов", List.of("&7Вернуться к выбору работы")));
         }
 
         inv.setItem(49, named(Material.GOLD_INGOT, "&aПроверить награды", List.of(

@@ -88,6 +88,14 @@ public final class JobsPlugin extends JavaPlugin {
         bind("quests", new QuestsCommand(this.questManager, settings));
         bind("questsadmin", new QuestsAdminCommand(this.questManager, settings));
 
+        // Гарантируем, что /quests привязан к нашему хабу разделов работ даже при наличии старого FCP-Quests
+        getServer().getScheduler().runTask(this, () -> {
+            PluginCommand qCmd = getCommand("quests");
+            if (qCmd != null) {
+                getServer().getCommandMap().getKnownCommands().put("quests", qCmd);
+            }
+        });
+
         var pm = getServer().getPluginManager();
         pm.registerEvents(new QuitListener(), this);
         pm.registerEvents(new WorkMenuListener(this.questManager, settings), this);

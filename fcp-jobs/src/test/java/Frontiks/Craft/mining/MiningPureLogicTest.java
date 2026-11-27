@@ -111,9 +111,28 @@ class MiningPureLogicTest {
         Random rng = new Random(42L);
         for (int i = 0; i < 50; i++) {
             Map<String, Integer> drops = LootTable.roll(table, rng);
+            assertEquals(1, drops.size(), "Из одного камня должен падать ровно 1 вид ресурса");
             int cobble = drops.getOrDefault("COBBLESTONE", 0);
             assertTrue(cobble >= 2 && cobble <= 4);
             assertFalse(drops.containsKey("DIAMOND"));
+        }
+    }
+
+    @Test
+    void lootTableDropsStrictlyOneOreTypeAndNormalizesOreBlocks() {
+        List<LootEntry> multiOres = List.of(
+                new LootEntry("COAL_ORE", 1, 3, 0.40),
+                new LootEntry("DEEPSLATE_IRON_ORE", 1, 2, 0.30),
+                new LootEntry("RAW_GOLD_BLOCK", 1, 2, 0.20),
+                new LootEntry("DIAMOND_ORE", 1, 1, 0.10)
+        );
+        Random rng = new Random(12345L);
+        for (int i = 0; i < 200; i++) {
+            Map<String, Integer> drops = LootTable.roll(multiOres, rng);
+            assertEquals(1, drops.size(), "Из 1 камня должен выпадать ровно 1 вид руды, а не несколько сразу");
+            String droppedMat = drops.keySet().iterator().next();
+            assertTrue(Set.of("COAL", "RAW_IRON", "RAW_GOLD", "DIAMOND").contains(droppedMat),
+                    "Блоки руд должны превращаться в нормальные предметы добычи, но выпало: " + droppedMat);
         }
     }
 

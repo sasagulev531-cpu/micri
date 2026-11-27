@@ -1,6 +1,7 @@
 package Frontiks.Craft.quests;
 
 import Frontiks.Craft.gui.MenuManager;
+import Frontiks.Craft.gui.WorkMenu;
 import Frontiks.Craft.mining.MiningSettings;
 import Frontiks.Craft.quests.v2.QuestEngineV2;
 import Frontiks.Craft.utils.color;
@@ -41,6 +42,26 @@ public final class QuestsMenuListener implements Listener {
     public void onClick(InventoryClickEvent e) {
         if (!(e.getWhoClicked() instanceof Player p)) return;
         if (e.getView() == null || e.getView().getTitle() == null) return;
+
+        // 1) Клики в хабе разделов квестов (/quests)
+        if (MenuManager.isInMenu(p.getUniqueId(), QuestsHubMenu.MENU_ID)) {
+            e.setCancelled(true);
+            int slot = e.getRawSlot();
+            if (slot < 0 || slot >= QuestsHubMenu.INV_SIZE) return;
+            if (slot == 22) {
+                p.closeInventory();
+                return;
+            }
+            String jobId = QuestsHubMenu.jobIdAt(p.getUniqueId(), slot);
+            if (jobId != null) {
+                MenuManager.removeMenu(p.getUniqueId());
+                QuestsHubMenu.clearState(p.getUniqueId());
+                new QuestsMenu(quests, settings).openFromHub(p);
+            }
+            return;
+        }
+
+        // 2) Клики в списке квестов Шахтёра
         if (!MenuManager.isInMenu(p.getUniqueId(), QuestsMenu.MENU_ID)) return;
 
         e.setCancelled(true);
@@ -56,6 +77,21 @@ public final class QuestsMenuListener implements Listener {
         if (slot == 53) {
             new QuestsMenu(quests, settings).open(p, curPage + 1);
             return;
+        }
+        if (slot == 48) {
+            QuestsMenu.ReturnTarget rt = QuestsMenu.returnTargetOf(p.getUniqueId());
+            if (rt == QuestsMenu.ReturnTarget.WORK_MENU) {
+                MenuManager.removeMenu(p.getUniqueId());
+                QuestsMenu.clearState(p.getUniqueId());
+                WorkMenu.open(p);
+                return;
+            }
+            if (rt == QuestsMenu.ReturnTarget.HUB_MENU) {
+                MenuManager.removeMenu(p.getUniqueId());
+                QuestsMenu.clearState(p.getUniqueId());
+                new QuestsHubMenu(quests, settings).open(p);
+                return;
+            }
         }
         if (slot == 49) {
             var result = quests.retryPendingPayouts(p);
@@ -85,17 +121,21 @@ public final class QuestsMenuListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = false)
     public void onDrag(InventoryDragEvent e) {
         if (e.getWhoClicked() instanceof Player p
-                && MenuManager.isInMenu(p.getUniqueId(), QuestsMenu.MENU_ID)) {
+                && (MenuManager.isInMenu(p.getUniqueId(), QuestsMenu.MENU_ID)
+                || MenuManager.isInMenu(p.getUniqueId(), QuestsHubMenu.MENU_ID))) {
             e.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onClose(InventoryCloseEvent e) {
-        if (e.getPlayer() instanceof Player p
-                && MenuManager.isInMenu(p.getUniqueId(), QuestsMenu.MENU_ID)) {
+        if (!(e.getPlayer() instanceof Player p)) return;
+        if (MenuManager.isInMenu(p.getUniqueId(), QuestsMenu.MENU_ID)) {
             MenuManager.removeMenu(p.getUniqueId());
             QuestsMenu.clearState(p.getUniqueId());
+        } else if (MenuManager.isInMenu(p.getUniqueId(), QuestsHubMenu.MENU_ID)) {
+            MenuManager.removeMenu(p.getUniqueId());
+            QuestsHubMenu.clearState(p.getUniqueId());
         }
     }
 
