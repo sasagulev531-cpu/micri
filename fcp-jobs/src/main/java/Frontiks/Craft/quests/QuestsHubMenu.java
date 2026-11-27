@@ -68,7 +68,7 @@ public final class QuestsHubMenu {
         for (int i = 0; i < Math.min(jobs.size(), layout.length); i++) {
             JobKind job = jobs.get(i);
             int slot = layout[i];
-            slotMap.put(slot, job.id());
+            slotMap.put(slot, job.id);
             inv.setItem(slot, buildJobCard(job, allViews));
         }
 
@@ -84,7 +84,7 @@ public final class QuestsHubMenu {
         int completed = 0;
         for (QuestView v : allViews) {
             String reqJob = v.spec().requires().jobId();
-            if (reqJob == null || reqJob.isBlank() || reqJob.equalsIgnoreCase(job.id())) {
+            if (reqJob == null || reqJob.isBlank() || reqJob.equalsIgnoreCase(job.id)) {
                 total++;
                 if (v.lifecycle() == LifecycleState.COMPLETED) {
                     completed++;
@@ -92,18 +92,18 @@ public final class QuestsHubMenu {
             }
         }
 
-        Material iconMat = Material.matchMaterial(job.iconMaterial().toUpperCase(Locale.ROOT));
+        Material iconMat = Material.matchMaterial(job.iconMaterial.toUpperCase(Locale.ROOT));
         if (iconMat == null || !iconMat.isItem()) iconMat = Material.IRON_PICKAXE;
 
         List<String> lore = new ArrayList<>();
-        lore.add("&7Раздел заданий профессии &f" + job.displayName() + "&7.");
+        lore.add("&7Раздел заданий профессии &f" + job.displayName + "&7.");
         lore.add("");
         lore.add("&7Доступно задач: &f" + total);
         lore.add("&7Выполнено: &a" + completed + "&7/&f" + total);
         lore.add("");
         lore.add("&eНажмите ЛКМ, чтобы открыть квесты!");
 
-        return named(iconMat, "&6&l" + job.displayName(), lore);
+        return named(iconMat, "&6&l" + job.displayName, lore);
     }
 
     private static ItemStack named(Material m, String name, List<String> lore) {
