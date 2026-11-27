@@ -41,6 +41,8 @@ jobs:
         run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(19, min(28, len(c)+1))]'
       - name: Chunks 28-36
         run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(28, min(37, len(c)+1))]'
+      - name: Chunks 37-45
+        run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(37, min(46, len(c)+1))]'
 
   export2:
     needs: build
@@ -58,8 +60,6 @@ jobs:
           chunks = [b64[i:i+4000] for i in range(0, len(b64), 4000)]
           pathlib.Path("/tmp/chunks.json").write_text(json.dumps({"chunks": chunks}))
           PY
-      - name: Chunks 37-45
-        run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(37, min(46, len(c)+1))]'
       - name: Chunks 46-54
         run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(46, min(55, len(c)+1))]'
       - name: Chunks 55-63
@@ -68,3 +68,5 @@ jobs:
         run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(64, min(73, len(c)+1))]'
       - name: Chunks 73-81
         run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(73, min(82, len(c)+1))]'
+      - name: Chunks 82-90
+        run: python3 -c 'import json; d=json.loads(open("/tmp/chunks.json").read()); c=d["chunks"]; [print(f"::notice title=JAR_{i:02d}_{len(c):02d}::{c[i-1]}") for i in range(82, min(91, len(c)+1))]'
